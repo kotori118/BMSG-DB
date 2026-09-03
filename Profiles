@@ -9,6 +9,12 @@ const BU_PROFILE = Object.freeze({
   DATA_START_ROW: 10,
   FIXED_COLUMNS: 4,
   EMPTY_FIELD_COLUMNS: 3,
+  LOG_DB_ID: '10vDKc_Q431iMDTTqB2A16i-Yp28oXSInoKiJXZtonRQ',
+  PROFILE_SETTINGS_SHEET: 'ProfileSettings',
+  PROFILE_SETTINGS_HEADERS: Object.freeze([
+    'ProfileID', 'FieldName', 'DataType', 'IsMultiValue', 'DisplayGroup',
+    'IsCompareTarget', 'QuizDifficulty', 'DisplayOrder', 'IsActive'
+  ]),
 });
 
 function confirmAndSyncProfiles() {
@@ -199,12 +205,53 @@ function normalizeStoredProfileValue_(value, field) {
   return clean_(value);
 }
 
+function getProfileSettingsTable_() {
+  const logSs = SpreadsheetApp.openById(BU_PROFILE.LOG_DB_ID);
+  const sheet = logSs.getSheetByName(BU_PROFILE.PROFILE_SETTINGS_SHEET);
+  if (!sheet) throw new Error('BMSG_ Universe_Log に ProfileSettings シートがありません');
+  const table = readTable_(sheet);
+  requireColumns_(table, BU_PROFILE.PROFILE_SETTINGS_HEADERS);
+  return table;
+}
+
+function nextProfileSettingsDisplayOrder_(table) {
+  const col = table.map.DisplayOrder;
+  let max = -1;
+  table.rows.forEach(row => {
+    const n = Number(row.values[col]);
+    if (Number.isFinite(n)) max = Math.max(max, n);
+  });
+  return max + 1;
+}
+
+function appendProfileSettingForNewField_(table, profileId, field, displayOrder) {
+  const idCol = table.map.ProfileID;
+  if (table.rows.some(row => id_(row.values[idCol]) === profileId)) {
+    throw new Error('ProfileSettings に ' + profileId + ' がすでに存在します');
+  }
+  appendStyledRow_(table.sheet, [
+    profileId,
+    field.label,
+    field.dataType,
+    field.isMulti,
+    field.inputGroup || '基本',
+    false,
+    '',
+    displayOrder,
+    true,
+  ]);
+}
+
 function applyProfileSyncPlan_(ss, plan) {
   const input = requireSheet_(ss, BU1.SHEETS.INPUT_PROFILE);
   const membersSheet = requireSheet_(ss, BU1.SHEETS.MEMBERS);
   const profilesSheet = requireSheet_(ss, BU1.SHEETS.PROFILES);
   const fieldIdByInputCol = {};
   plan.fields.forEach(f => { fieldIdByInputCol[f.col] = f.profileId; });
+
+  // 新規項目がある場合は、コアDBを書き始める前にLog側の構造を検証する。
+  const profileSettings = plan.newFields.length ? getProfileSettingsTable_() : null;
+  let nextSettingsOrder = profileSettings ? nextProfileSettingsDisplayOrder_(profileSettings) : 0;
 
   plan.newFields.forEach(f => {
     const no = issueNumber_(ss, 'NEXT_PROFILE_ID');
@@ -218,6 +265,8 @@ function applyProfileSyncPlan_(ss, plan) {
     copyColumnPresentation_(profilesSheet, oldLastCol, newCol);
     profilesSheet.getRange(1, newCol).setValue(profileId);
     expandBasicFilter_(profilesSheet, profilesSheet.getLastRow(), newCol);
+
+    appendProfileSettingForNewField_(profileSettings, profileId, f, nextSettingsOrder++);
   });
 
   let members = readTable_(membersSheet);
