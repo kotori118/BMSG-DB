@@ -1,0 +1,37 @@
+name: Deploy to GAS
+
+# mainブランチにpushされたら自動実行
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. GitHubのリポジトリコードを取得
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Node.js環境のセットアップ
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      # 3. clasp（GAS管理ツール）をインストール
+      - name: Install clasp
+        run: npm install -g @google/clasp
+
+      # 4. claspの認証ファイル (.clasprc.json) を生成
+      - name: Create clasprc.json
+        run: |
+          cat <<EOF > ~/.clasprc.json
+          ${{ secrets.CLASPRC_JSON }}
+          EOF
+
+      # 5. GASへコードをプッシュ (clasp push)
+      - name: Push to GAS
+        run: clasp push -f
