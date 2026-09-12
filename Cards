@@ -1,4 +1,4 @@
-/** Drive画像名「アーティスト名_レアリティ.ext」→ 09_Cards */
+/** Drive画像名「アーティスト名_レアリティ.ext」→ 09_Images */
 function syncCardsNow() { const r = syncCardsOnAccess_(); alert_('カード同期', '更新: ' + r.updated + '件 / 保留: ' + r.warnings + '件'); }
 function syncCardsOnAccessSafe_() { try { return syncCardsOnAccess_(); } catch (e) { console.error(e); return { ok: false, error: String(e) }; } }
 function syncCardsOnAccess_() {

@@ -14,7 +14,7 @@ const BU1 = Object.freeze({
     CONFIG: '00_Config', GROUPS: '01_Groups', MEMBERS: '02_Members',
     GUESTS: '03_Guests', GROUP_MEMBERS: '04_GroupMembers',
     PROFILES: '05_Profiles', SONGS: '06_Songs', SONG_CREDITS: '07_SongCredits',
-    LYRICS_PARTS: '08_LyricsParts', CARDS: '09_Cards',
+    LYRICS_PARTS: '08_LyricsParts', CARDS: '09_Images',
     METRICS: '10_PerformanceMetrics', TRANSFERS: '11_PartTransfers',
   }),
   COLORS: Object.freeze({ INPUT: '#FFF9D6', AUTO: '#EFEFEF', ERROR: '#F4CCCC' }),
