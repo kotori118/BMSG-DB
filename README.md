@@ -6,7 +6,7 @@ BMSG Universe の共通DBを管理する Google Apps Script 用リポジトリ�
 
 ### 1. GitHub更新とApps Script本体への反映は別です
 - このリポジトリの `main` を更新しただけでは、Apps Script本体へ自動反映されるとは限りません。
-- 現時点では `.github/workflows` / `.clasp.json` による自動デプロイ構成を前提にしないでください。
+- `.github/workflows/deploy.yml` は存在しますが、`.clasp.json` と有効な `CLASPRC_JSON` の両方が確認できるまでは自動デプロイ構成を有効と扱わないでください。
 - 「GitHubへコミット済み」と「Universe_02へ反映済み」は必ず分けて扱ってください。
 - Apps Script本体へ反映する際は、GitHubの最新版とApps Script側の内容が一致していることを確認してください。
 - デプロイ経路が確認できていない状態で「本番反映済み」「動作確認済み」と判断しないでください。
@@ -101,4 +101,6 @@ ProfileSettingsの初期値：
 
 ## 現在のデプロイ状態
 
-現時点では、このリポジトリから `Universe_02` への自動デプロイ経路は未確認です。GitHub上の変更をApps Script本体へ反映する際は、実際のデプロイ方法を確認してから実施してください。
+`Cards.gs` と `Profiles.gs` を含む全GASソースは、claspがApps Scriptファイルとして認識できる拡張子へ統一します。
+
+現時点では、このリポジトリから `Universe_02` への自動デプロイ経路は未成立です。直近のActionsは`CLASPRC_JSON`が空のため`Unexpected end of JSON input`で失敗しており、リポジトリ内にも`.clasp.json`がありません。GitHub上の変更をApps Script本体へ反映する際は、認証Secretと対象scriptIdを確認してから実施してください。
