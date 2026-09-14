@@ -1,7 +1,7 @@
 /**
  * 09_Images 修復用。
- * 通常の画像登録・差し替えは BMSG Universe の SETTINGS > 画像管理を正規入口とし、
- * この同期は Drive と 09_Images の紐付けが壊れた場合だけ手動で使用する。
+ * 通常の画像登録・行作成・ImageID発行は BMSG Universe の SETTINGS > 画像管理を正規入口とする。
+ * BMSG-DB側は既存09_Images行とDriveファイルの紐付け修復だけを行い、新規ImageIDは発行しない。
  */
 function syncCardsNow() {
   const r = syncCardsOnAccess_();
@@ -15,11 +15,11 @@ function syncCardsOnAccessSafe_() {
 
 function syncCardsOnAccess_() {
   const lock = LockService.getDocumentLock();
-  if (!lock.tryLock(3000)) return { ok: true, skipped: true, updated: 0, warnings: 0 };
+  if (!lock || !lock.tryLock(3000)) return { ok: true, skipped: true, updated: 0, warnings: 0 };
   try {
     const ss = SpreadsheetApp.getActiveSpreadsheet();
-    const folderId = clean_(getConfig_(ss, 'card_image_folder_id', getConfig_(ss, 'CARD_IMAGE_FOLDER_ID', '')));
-    if (!folderId) throw new Error('00_Configにカード画像フォルダIDがありません');
+    const folderId = clean_(BU1.CARD_IMAGE_FOLDER_ID);
+    if (!folderId) throw new Error('カード画像フォルダIDを確認できません');
 
     const members = readTable_(requireSheet_(ss, BU1.SHEETS.MEMBERS));
     requireColumns_(members, ['MemberID', 'GroupID', 'DisplayName', 'DisplayOrder']);
@@ -28,8 +28,6 @@ function syncCardsOnAccess_() {
     const groupNameById = {};
     groups.rows.forEach(r => { groupNameById[id_(r.values[groups.map.GroupID])] = clean_(r.values[groups.map.GroupName]); });
     const byName = buildNameIndex_(members.rows, r => r.values[members.map.DisplayName]);
-
-    members.rows.forEach(r => ensureCardRowsForMember_(ss, id_(r.values[members.map.MemberID]), Number(r.values[members.map.DisplayOrder] || 9999)));
 
     const filesByKey = {}, allImageIds = {};
     const files = DriveApp.getFolderById(folderId).getFiles();
@@ -79,25 +77,10 @@ function syncCardsOnAccess_() {
   }
 }
 
+/**
+ * 互換用。旧プロフィール同期から呼ばれてもDB側では行作成しない。
+ * 画像行の不足はSETTINGS > 画像管理の「Driveから再同期」で補う。
+ */
 function ensureCardRowsForMember_(ss, memberId, displayOrder) {
-  const sheet = requireSheet_(ss, BU1.SHEETS.CARDS);
-  const table = readTable_(sheet);
-  requireColumns_(table, ['ImageID', 'TargetType', 'TargetID', 'Rarity', 'DriveFileID', 'DisplayOrder', 'IsProfileMain']);
-  BU1.CARD_RARITIES.forEach((rarity, i) => {
-    const exists = table.rows.some(r =>
-      clean_(r.values[table.map.TargetType]).toLowerCase() === 'member' &&
-      id_(r.values[table.map.TargetID]) === String(memberId) &&
-      clean_(r.values[table.map.Rarity]).toUpperCase() === rarity
-    );
-    if (exists) return;
-    const values = new Array(table.header.length).fill('');
-    values[table.map.ImageID] = issueNumber_(ss, 'NEXT_IMAGE_ID');
-    values[table.map.TargetType] = 'Member';
-    values[table.map.TargetID] = memberId;
-    values[table.map.Rarity] = rarity;
-    values[table.map.DriveFileID] = '';
-    values[table.map.DisplayOrder] = (Number(displayOrder) - 1) * 4 + i + 1;
-    values[table.map.IsProfileMain] = rarity === 'SSR';
-    appendStyledRow_(sheet, values);
-  });
+  return { ok: true, skipped: true, memberId: String(memberId || '') };
 }
