@@ -10,13 +10,13 @@ permissions:
   contents: write
 
 jobs:
-  cleanup:
+  harden:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Route legacy Guest registration through shared writer
+      - name: Harden legacy direct-master preflight
         run: |
           python <<'PY'
           from pathlib import Path
@@ -46,31 +46,72 @@ jobs:
                   i+=1
               raise SystemExit('unclosed function')
 
-          p=Path('Lyrics.gs'); text=p.read_text()
-          text=replace_function(text,'confirmAndRegisterLyricsGuests_',r'''function confirmAndRegisterLyricsGuests_(ss, names) {
-            const result = { registered: [], ignored: [] };
-            if (!names.length) return result;
-            names.forEach(function(name) {
-              const yes = confirm_(
-                '未登録Guest候補',
-                '歌唱者候補「' + name + '」は02_Members／03_Guestsに未登録です。\n\n' +
-                '［はい］Guestとして03_Guestsへ登録し、この行を歌唱者の区切りとして扱う\n' +
-                '［いいえ］Guestではない。この行は区切らずLyrics本文として残す'
-              );
-              if (!yes) { result.ignored.push(name); return; }
-              const saved = withSharedWriterLock_('Guest登録', function() {
-                return registerGuestCore_(ss, name, {source:'BMSG-DB_LEGACY',notePrefix:'Spreadsheet 歌詞解析 Guest登録'});
-              });
-              if (saved && saved.ok) result.registered.push(name);
+          p=Path('UniverseService.gs'); text=p.read_text()
+          old="""  if (memberTable.rows.some(function(r){ return clean_(r.values[memberTable.map.DisplayName]) === name; })) {\n    throw new Error('同名のメンバーが登録済みです: ' + name);\n  }"""
+          new="""  if (memberTable.rows.some(function(r){ return clean_(r.values[memberTable.map.DisplayName]) === name; })) {\n    return {ok:true, alreadyExists:true, name:name};\n  }"""
+          if old not in text: raise SystemExit('member duplicate block not found')
+          text=text.replace(old,new,1)
+
+          text=replace_function(text,'getLegacyDirectMastersPlan_',r'''function getLegacyDirectMastersPlan_() {
+            const ss = openCoreSpreadsheet_();
+            const errors = [];
+            const members = readTable_(requireSheet_(ss, BU1.SHEETS.MEMBERS));
+            const guests = readTable_(requireSheet_(ss, BU1.SHEETS.GUESTS));
+            const songs = readTable_(requireSheet_(ss, BU1.SHEETS.SONGS));
+            requireColumns_(members, ['DisplayName']);
+            requireColumns_(guests, ['GuestID','DisplayName']);
+            requireColumns_(songs, ['SongID','Title','Artist','ReleaseDate','Form','CDTitle','IsTitleTrack']);
+
+            const memberNames = {};
+            members.rows.forEach(function(r){ const name=clean_(r.values[members.map.DisplayName]); if(name) memberNames[name]=true; });
+            const committedGuestNames = {};
+            guests.rows.forEach(function(r){ const name=clean_(r.values[guests.map.DisplayName]); if(name && id_(r.values[guests.map.GuestID])) committedGuestNames[name]=true; });
+            const guestRows = guests.rows.filter(function(r){ return !id_(r.values[guests.map.GuestID]) && clean_(r.values[guests.map.DisplayName]); });
+            const guestNames = {};
+            guestRows.forEach(function(r){
+              const name = clean_(r.values[guests.map.DisplayName]);
+              if (memberNames[name]) errors.push(r.rowNumber + '行目: 同名のメンバーが登録済みです: ' + name);
+              if (committedGuestNames[name]) errors.push(r.rowNumber + '行目: 同名のGuestが登録済みです: ' + name);
+              if (guestNames[name]) errors.push('Guest名が未採番行で重複しています: ' + name);
+              guestNames[name] = true;
             });
-            return result;
+
+            const songRows = songs.rows.filter(function(r){ return !id_(r.values[songs.map.SongID]) && r.values.some(function(v){return !!clean_(v);}); });
+            const committedSongKeys = {};
+            songs.rows.forEach(function(r){
+              if (!id_(r.values[songs.map.SongID])) return;
+              const title=clean_(r.values[songs.map.Title]), artist=clean_(r.values[songs.map.Artist]);
+              if(title && artist) committedSongKeys[title+'\u0000'+artist]=true;
+            });
+            const pendingSongKeys = {};
+            songRows.forEach(function(r){
+              try {
+                if (!clean_(r.values[songs.map.ReleaseDate])) throw new Error('ReleaseDateが必須です');
+                const song = normalizeUniverseServiceSong_({
+                  title:r.values[songs.map.Title], artist:r.values[songs.map.Artist], releaseDate:r.values[songs.map.ReleaseDate],
+                  form:r.values[songs.map.Form], cdTitle:r.values[songs.map.CDTitle], isTitleTrack:r.values[songs.map.IsTitleTrack]
+                });
+                assertUniverseServiceArtist_(ss, song.artist);
+                const key=song.title+'\u0000'+song.artist;
+                if (committedSongKeys[key]) throw new Error('同じTitle＋Artistの曲が登録済みです');
+                if (pendingSongKeys[key]) throw new Error('同じTitle＋Artistが未採番行で重複しています');
+                pendingSongKeys[key]=true;
+              } catch (e) { errors.push(r.rowNumber + '行目: ' + e.message); }
+            });
+            return {
+              guestCount:guestRows.length,
+              songCount:songRows.length,
+              guestRows:guestRows.map(function(r){return {rowNumber:r.rowNumber,name:clean_(r.values[guests.map.DisplayName])};}),
+              songRows:songRows.map(function(r){return {rowNumber:r.rowNumber};}),
+              errors:errors
+            };
           }''')
           p.write_text(text)
           PY
 
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add Lyrics.gs
+          git add UniverseService.gs
           git diff --cached --check
-          git commit -m 'Route legacy Guest registration through shared writer'
+          git commit -m 'Harden shared writer legacy preflight'
           git push
