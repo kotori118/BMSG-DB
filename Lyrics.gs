@@ -98,31 +98,23 @@ function previewLyricsInput() {
   }
 }
 function commitLyricsInput() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet(), input = requireSheet_(ss, BU1.SHEETS.INPUT_LYRICS);
-  withDocumentLock_('歌詞登録', function () {
-    const saved = PropertiesService.getDocumentProperties().getProperty('BU_LYRICS_PREVIEW');
-    if (!saved) { alert_('歌詞登録', '先に「歌詞｜解析（プレビュー）」を実行してください。'); return; }
-    const payload = JSON.parse(saved), raw = input.getRange(BU_LYRICS.INPUT_CELL).getDisplayValue();
-    const metaInput = readLyricsMetadataInput_(input);
-    if (raw !== payload.raw || JSON.stringify(metaInput) !== JSON.stringify(payload.metaInput || {}) || !payload.result.canRegister) { alert_('歌詞登録', '曲名・Group・発売日・歌詞のいずれかがプレビュー時から変わったか、登録不可の解析結果です。もう一度解析してください。'); return; }
-    const result = payload.result;
-    if (!confirm_('歌詞登録の確認', result.title + '\n' + result.parts.length + 'パートを登録しますか？\n既存曲の場合は歌詞パートを置き換えます。')) return;
-    let songId = result.song && result.song.songId;
-    if (!songId) {
-      const artist = result.group.name, band = BU1.SONG_BANDS[artist] || BU1.SONG_BANDS.DEFAULT;
-      songId = String(issueNumber_(ss, 'NEXT_SONG_ID_' + band));
-      appendStyledRow_(requireSheet_(ss, BU1.SHEETS.SONGS), [songId, result.title, artist, normalizeDateForSheet_(result.releaseDate), '', '', false]);
-      ensureSongCreditRow_(ss, songId, result.title, artist);
-    }
-    const partsSheet = requireSheet_(ss, BU1.SHEETS.LYRICS_PARTS), table = readTable_(partsSheet);
-    table.rows.filter(r => id_(r.values[table.map.SongID]) === String(songId)).sort((a, b) => b.rowNumber - a.rowNumber).forEach(r => partsSheet.deleteRow(r.rowNumber));
-    writeRows_(partsSheet, partsSheet.getLastRow() + 1, 1, result.parts.map(p => [songId, p.partOrder, p.mainSingerIds.join(','), p.lyrics]));
-    if (result.group.name === 'BE:FIRST') syncPerformanceMetricRows(ss, true);
-    input.getRange(BU_LYRICS.STATUS_CELL).setValue('登録済み SongID ' + songId);
-    PropertiesService.getDocumentProperties().deleteProperty('BU_LYRICS_PREVIEW');
-    alert_('歌詞登録完了', 'SongID ' + songId + ' を登録しました。');
-  });
+  const input = requireSheet_(SpreadsheetApp.getActiveSpreadsheet(), BU1.SHEETS.INPUT_LYRICS);
+  const saved = PropertiesService.getDocumentProperties().getProperty('BU_LYRICS_PREVIEW');
+  if (!saved) { alert_('歌詞登録', '先に「歌詞｜解析（プレビュー）」を実行してください。'); return; }
+  const payload = JSON.parse(saved);
+  const raw = input.getRange(BU_LYRICS.INPUT_CELL).getDisplayValue();
+  const metaInput = readLyricsMetadataInput_(input);
+  if (raw !== payload.raw || JSON.stringify(metaInput) !== JSON.stringify(payload.metaInput || {}) || !payload.result.canRegister) {
+    alert_('歌詞登録', '曲名・Group・発売日・歌詞のいずれかがプレビュー時から変わったか、登録不可の解析結果です。もう一度解析してください。');
+    return;
+  }
+  if (!confirm_('歌詞登録の確認', payload.result.title + '\n' + payload.result.parts.length + 'パートを登録しますか？\n既存曲の場合は歌詞パートを置き換えます。')) return;
+  const result = commitLegacyLyricsInputForSharedWriter_({raw:raw, metaInput:metaInput});
+  input.getRange(BU_LYRICS.STATUS_CELL).setValue('登録済み SongID ' + result.songId);
+  PropertiesService.getDocumentProperties().deleteProperty('BU_LYRICS_PREVIEW');
+  alert_('歌詞登録完了', 'SongID ' + result.songId + ' を登録しました。');
 }
+
 
 /**
  * 自由形式素材を解析する。
