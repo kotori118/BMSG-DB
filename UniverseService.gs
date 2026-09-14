@@ -88,19 +88,56 @@ function saveSongInfoForUniverse(payload) {
     const currentArtist = clean_(target[0].values[table.map.Artist]);
     if (currentArtist !== song.artist) throw new Error('登録後のARTISTは変更できません。');
     const row = target[0].rowNumber;
-    sheet.getRange(row, table.map.Title + 1).setValue(song.title);
-    sheet.getRange(row, table.map.ReleaseDate + 1).setValue(song.releaseDateValue);
-    sheet.getRange(row, table.map.Form + 1).setValue(song.form);
-    sheet.getRange(row, table.map.CDTitle + 1).setValue(song.cdTitle);
-    sheet.getRange(row, table.map.IsTitleTrack + 1).setValue(song.isTitleTrack);
+    const beforeSong = sheet.getRange(row, 1, 1, table.header.length).getValues()[0];
+    const afterSong = beforeSong.slice();
+    afterSong[table.map.Title] = song.title;
+    afterSong[table.map.ReleaseDate] = song.releaseDateValue;
+    afterSong[table.map.Form] = song.form;
+    afterSong[table.map.CDTitle] = song.cdTitle;
+    afterSong[table.map.IsTitleTrack] = song.isTitleTrack;
 
     const creditsSheet = requireSheet_(ss, BU1.SHEETS.SONG_CREDITS);
     const creditsTable = readTable_(creditsSheet);
     const creditRows = creditsTable.rows.filter(r => id_(r.values[creditsTable.map.SongID]) === songId);
     if (creditRows.length > 1) throw new Error('07_SongCreditsでSongIDが重複しています。');
-    if (creditRows.length && creditsTable.map.Title != null) creditsSheet.getRange(creditRows[0].rowNumber, creditsTable.map.Title + 1).setValue(song.title);
-    SpreadsheetApp.flush();
-    return { ok:true, songId:songId };
+    let creditRowNumber = 0;
+    let beforeCredit = null;
+    let afterCredit = null;
+    let appendedCredit = false;
+    if (currentArtist === 'BE:FIRST') {
+      requireColumns_(creditsTable, ['SongID','Title','Lyricists','Composers','Choreographers']);
+      if (creditRows.length) {
+        creditRowNumber = creditRows[0].rowNumber;
+        beforeCredit = creditsSheet.getRange(creditRowNumber, 1, 1, creditsTable.header.length).getValues()[0];
+        afterCredit = beforeCredit.slice();
+        afterCredit[creditsTable.map.Title] = song.title;
+      } else {
+        afterCredit = new Array(creditsTable.header.length).fill('');
+        afterCredit[creditsTable.map.SongID] = songId;
+        afterCredit[creditsTable.map.Title] = song.title;
+      }
+    }
+
+    try {
+      sheet.getRange(row, 1, 1, afterSong.length).setValues([afterSong]);
+      if (afterCredit) {
+        if (creditRowNumber) creditsSheet.getRange(creditRowNumber, 1, 1, afterCredit.length).setValues([afterCredit]);
+        else { creditRowNumber = appendStyledRow_(creditsSheet, afterCredit); appendedCredit = true; }
+      }
+      SpreadsheetApp.flush();
+      assertUniverseServiceRow_(sheet, row, afterSong, [table.map.SongID,table.map.Title,table.map.Artist,table.map.ReleaseDate,table.map.Form,table.map.CDTitle,table.map.IsTitleTrack], '楽曲情報');
+      if (afterCredit) assertUniverseServiceRow_(creditsSheet, creditRowNumber, afterCredit, [creditsTable.map.SongID,creditsTable.map.Title], '楽曲クレジット');
+      return { ok:true, songId:songId };
+    } catch (error) {
+      const rollbackErrors = [];
+      try { sheet.getRange(row, 1, 1, beforeSong.length).setValues([beforeSong]); } catch (rollbackError) { rollbackErrors.push(rollbackError.message); }
+      try {
+        if (appendedCredit && creditRowNumber <= creditsSheet.getLastRow()) creditsSheet.deleteRow(creditRowNumber);
+        else if (beforeCredit) creditsSheet.getRange(creditRowNumber, 1, 1, beforeCredit.length).setValues([beforeCredit]);
+      } catch (rollbackError) { rollbackErrors.push(rollbackError.message); }
+      SpreadsheetApp.flush();
+      throw universeServiceRollbackError_(error, rollbackErrors);
+    }
   });
 }
 
@@ -113,28 +150,39 @@ function saveSongCreditsForUniverse(payload) {
   return withSharedWriterLock_('クレジット保存', function() {
     const ss = openCoreSpreadsheet_();
     const songsTable = readTable_(requireSheet_(ss, BU1.SHEETS.SONGS));
-    const songRow = songsTable.rows.find(r => id_(r.values[songsTable.map.SongID]) === songId);
-    if (!songRow) throw new Error('曲が見つかりません。');
+    const songRows = songsTable.rows.filter(r => id_(r.values[songsTable.map.SongID]) === songId);
+    if (songRows.length !== 1) throw new Error('06_SongsでSongIDを一意に確認できません。');
+    const songRow = songRows[0];
+    if (clean_(songRow.values[songsTable.map.Artist]) !== 'BE:FIRST') throw new Error('SongCreditsはBE:FIRSTの楽曲のみ登録できます。');
     const sheet = requireSheet_(ss, BU1.SHEETS.SONG_CREDITS);
     const table = readTable_(sheet);
     requireColumns_(table, ['SongID','Title','Lyricists','Composers','Choreographers']);
-    let row = table.rows.find(r => id_(r.values[table.map.SongID]) === songId);
-    if (!row) {
-      const values = new Array(table.header.length).fill('');
-      values[table.map.SongID] = songId;
-      values[table.map.Title] = clean_(songRow.values[songsTable.map.Title]);
-      values[table.map.Lyricists] = credits.lyricists;
-      values[table.map.Composers] = credits.composers;
-      values[table.map.Choreographers] = credits.choreographers;
-      appendStyledRow_(sheet, values);
-    } else {
-      sheet.getRange(row.rowNumber, table.map.Title + 1).setValue(clean_(songRow.values[songsTable.map.Title]));
-      sheet.getRange(row.rowNumber, table.map.Lyricists + 1).setValue(credits.lyricists);
-      sheet.getRange(row.rowNumber, table.map.Composers + 1).setValue(credits.composers);
-      sheet.getRange(row.rowNumber, table.map.Choreographers + 1).setValue(credits.choreographers);
+    const rows = table.rows.filter(r => id_(r.values[table.map.SongID]) === songId);
+    if (rows.length > 1) throw new Error('07_SongCreditsでSongIDが重複しています。');
+    const row = rows[0] || null;
+    const before = row ? sheet.getRange(row.rowNumber, 1, 1, table.header.length).getValues()[0] : null;
+    const after = before ? before.slice() : new Array(table.header.length).fill('');
+    after[table.map.SongID] = songId;
+    after[table.map.Title] = clean_(songRow.values[songsTable.map.Title]);
+    after[table.map.Lyricists] = credits.lyricists;
+    after[table.map.Composers] = credits.composers;
+    after[table.map.Choreographers] = credits.choreographers;
+    let rowNumber = row ? row.rowNumber : 0;
+    try {
+      if (rowNumber) sheet.getRange(rowNumber, 1, 1, after.length).setValues([after]);
+      else rowNumber = appendStyledRow_(sheet, after);
+      SpreadsheetApp.flush();
+      assertUniverseServiceRow_(sheet, rowNumber, after, [table.map.SongID,table.map.Title,table.map.Lyricists,table.map.Composers,table.map.Choreographers], '楽曲クレジット');
+      return { ok:true, songId:songId };
+    } catch (error) {
+      const rollbackErrors = [];
+      try {
+        if (before) sheet.getRange(rowNumber, 1, 1, before.length).setValues([before]);
+        else if (rowNumber && rowNumber <= sheet.getLastRow()) sheet.deleteRow(rowNumber);
+      } catch (rollbackError) { rollbackErrors.push(rollbackError.message); }
+      SpreadsheetApp.flush();
+      throw universeServiceRollbackError_(error, rollbackErrors);
     }
-    SpreadsheetApp.flush();
-    return { ok:true, songId:songId };
   });
 }
 
@@ -170,10 +218,24 @@ function updateLyricsPartForUniverse(payload) {
     const table = readTable_(sheet);
     const matches = table.rows.filter(r => id_(r.values[table.map.SongID]) === songId && Number(r.values[table.map.PartOrder]) === partOrder);
     if (matches.length !== 1) throw new Error('更新対象の歌詞パートを一意に確認できません。');
-    sheet.getRange(matches[0].rowNumber, table.map.Singer + 1).setNumberFormat('@').setValue(singer);
-    sheet.getRange(matches[0].rowNumber, table.map.Lyrics + 1).setNumberFormat('@').setValue(lyrics);
-    SpreadsheetApp.flush();
-    return { ok:true, songId:songId, partOrder:partOrder, singer:singer, lyrics:lyrics };
+    const rowNumber = matches[0].rowNumber;
+    const before = sheet.getRange(rowNumber, 1, 1, table.header.length).getValues()[0];
+    const after = before.slice();
+    after[table.map.Singer] = singer;
+    after[table.map.Lyrics] = lyrics;
+    try {
+      sheet.getRange(rowNumber, 1, 1, after.length).setValues([after]);
+      sheet.getRange(rowNumber, table.map.Singer + 1).setNumberFormat('@');
+      sheet.getRange(rowNumber, table.map.Lyrics + 1).setNumberFormat('@');
+      SpreadsheetApp.flush();
+      assertUniverseServiceRow_(sheet, rowNumber, after, [table.map.SongID,table.map.PartOrder,table.map.Singer,table.map.Lyrics], '歌詞パート');
+      return { ok:true, songId:songId, partOrder:partOrder, singer:singer, lyrics:lyrics };
+    } catch (error) {
+      const rollbackErrors = [];
+      try { sheet.getRange(rowNumber, 1, 1, before.length).setValues([before]); } catch (rollbackError) { rollbackErrors.push(rollbackError.message); }
+      SpreadsheetApp.flush();
+      throw universeServiceRollbackError_(error, rollbackErrors);
+    }
   });
 }
 
@@ -198,6 +260,33 @@ function normalizeUniverseServiceSong_(input) {
 
 function normalizeUniverseServiceCredits_(input) {
   return { lyricists:clean_(input.lyricists), composers:clean_(input.composers), choreographers:clean_(input.choreographers) };
+}
+
+function assertUniverseServiceRow_(sheet, rowNumber, expected, columns, label) {
+  const actual = sheet.getRange(rowNumber, 1, 1, expected.length).getValues()[0];
+  const mismatched = columns.some(function(index){
+    return !sameUniverseServiceValue_(actual[index], expected[index]);
+  });
+  if (mismatched) throw new Error(label + 'の保存後照合に失敗しました。');
+}
+
+function sameUniverseServiceValue_(actual, expected) {
+  if (actual instanceof Date || expected instanceof Date) {
+    const actualDate = actual instanceof Date ? actual : new Date(actual);
+    const expectedDate = expected instanceof Date ? expected : new Date(expected);
+    return Number.isFinite(actualDate.getTime()) && Number.isFinite(expectedDate.getTime()) && actualDate.getTime() === expectedDate.getTime();
+  }
+  if (typeof actual === 'boolean' || typeof expected === 'boolean') {
+    return (actual === true || String(actual).toUpperCase() === 'TRUE') === (expected === true || String(expected).toUpperCase() === 'TRUE');
+  }
+  return String(actual == null ? '' : actual).trim() === String(expected == null ? '' : expected).trim();
+}
+
+function universeServiceRollbackError_(originalError, rollbackErrors) {
+  const message = originalError && originalError.message ? originalError.message : String(originalError || '保存に失敗しました。');
+  return new Error(rollbackErrors && rollbackErrors.length
+    ? message + '\n復元にも失敗しました: ' + rollbackErrors.join(' / ')
+    : message);
 }
 
 function assertUniverseServiceArtist_(ss, artist) {
@@ -335,16 +424,20 @@ function createSongWithPartsCore_(ss, song, credits, parsedParts, context) {
     songValues[songsTable.map.IsTitleTrack] = song.isTitleTrack;
     rollback.push({sheet:songsSheet,row:appendStyledRow_(songsSheet, songValues)});
 
-    const creditsSheet = requireSheet_(ss, BU1.SHEETS.SONG_CREDITS);
-    const creditsTable = readTable_(creditsSheet);
-    requireColumns_(creditsTable, ['SongID','Title','Lyricists','Composers','Choreographers']);
-    const creditValues = new Array(creditsTable.header.length).fill('');
-    creditValues[creditsTable.map.SongID] = reservation.issuedId;
-    creditValues[creditsTable.map.Title] = song.title;
-    creditValues[creditsTable.map.Lyricists] = credits.lyricists;
-    creditValues[creditsTable.map.Composers] = credits.composers;
-    creditValues[creditsTable.map.Choreographers] = credits.choreographers;
-    rollback.push({sheet:creditsSheet,row:appendStyledRow_(creditsSheet, creditValues)});
+    let creditsSheet = null;
+    let creditsTable = null;
+    if (song.artist === 'BE:FIRST') {
+      creditsSheet = requireSheet_(ss, BU1.SHEETS.SONG_CREDITS);
+      creditsTable = readTable_(creditsSheet);
+      requireColumns_(creditsTable, ['SongID','Title','Lyricists','Composers','Choreographers']);
+      const creditValues = new Array(creditsTable.header.length).fill('');
+      creditValues[creditsTable.map.SongID] = reservation.issuedId;
+      creditValues[creditsTable.map.Title] = song.title;
+      creditValues[creditsTable.map.Lyricists] = credits.lyricists;
+      creditValues[creditsTable.map.Composers] = credits.composers;
+      creditValues[creditsTable.map.Choreographers] = credits.choreographers;
+      rollback.push({sheet:creditsSheet,row:appendStyledRow_(creditsSheet, creditValues)});
+    }
 
     const partsSheet = requireSheet_(ss, BU1.SHEETS.LYRICS_PARTS);
     const partsTable = readTable_(partsSheet);
@@ -366,7 +459,8 @@ function createSongWithPartsCore_(ss, song, credits, parsedParts, context) {
     const verifySongs = readTable_(songsSheet).rows.filter(function(r){ return id_(r.values[songsTable.map.SongID]) === reservation.issuedId; });
     const verifyPartsTable = readTable_(partsSheet);
     const verifyParts = verifyPartsTable.rows.filter(function(r){ return id_(r.values[verifyPartsTable.map.SongID]) === reservation.issuedId; });
-    if (verifySongs.length !== 1 || verifyParts.length !== parts.length) throw new Error('登録後の照合に失敗しました。');
+    const verifyCredits = creditsSheet ? readTable_(creditsSheet).rows.filter(function(r){ return id_(r.values[creditsTable.map.SongID]) === reservation.issuedId; }) : [];
+    if (verifySongs.length !== 1 || verifyParts.length !== parts.length || (song.artist === 'BE:FIRST' && verifyCredits.length !== 1)) throw new Error('登録後の照合に失敗しました。');
     finalizeIdReservation_(reservation, true, '新規曲登録完了: ' + song.title);
     return {ok:true, songId:reservation.issuedId, title:song.title, artist:song.artist};
   } catch (e) {
@@ -521,19 +615,26 @@ function assignSongIdToExistingRowCore_(ss, rowNumber, context) {
   let creditRow = 0;
   try {
     sheet.getRange(row.rowNumber, table.map.SongID + 1).setValue(reservation.issuedId);
-    const creditsSheet = requireSheet_(ss, BU1.SHEETS.SONG_CREDITS);
-    const creditsTable = readTable_(creditsSheet);
-    requireColumns_(creditsTable, ['SongID','Title','Lyricists','Composers','Choreographers']);
-    if (!creditsTable.rows.some(function(r){return id_(r.values[creditsTable.map.SongID]) === reservation.issuedId;})) {
-      const values = new Array(creditsTable.header.length).fill('');
-      values[creditsTable.map.SongID] = reservation.issuedId;
-      values[creditsTable.map.Title] = song.title;
-      creditRow = appendStyledRow_(creditsSheet, values);
+    if (song.artist === 'BE:FIRST') {
+      const creditsSheet = requireSheet_(ss, BU1.SHEETS.SONG_CREDITS);
+      const creditsTable = readTable_(creditsSheet);
+      requireColumns_(creditsTable, ['SongID','Title','Lyricists','Composers','Choreographers']);
+      if (!creditsTable.rows.some(function(r){return id_(r.values[creditsTable.map.SongID]) === reservation.issuedId;})) {
+        const values = new Array(creditsTable.header.length).fill('');
+        values[creditsTable.map.SongID] = reservation.issuedId;
+        values[creditsTable.map.Title] = song.title;
+        creditRow = appendStyledRow_(creditsSheet, values);
+      }
     }
     SpreadsheetApp.flush();
     table = readTable_(sheet);
     const verify = table.rows.filter(function(r){return id_(r.values[table.map.SongID]) === reservation.issuedId;});
-    if (verify.length !== 1) throw new Error('楽曲登録後の照合に失敗しました。');
+    let creditsVerified = true;
+    if (song.artist === 'BE:FIRST') {
+      const verifyCreditsTable = readTable_(requireSheet_(ss, BU1.SHEETS.SONG_CREDITS));
+      creditsVerified = verifyCreditsTable.rows.filter(function(r){return id_(r.values[verifyCreditsTable.map.SongID]) === reservation.issuedId;}).length === 1;
+    }
+    if (verify.length !== 1 || !creditsVerified) throw new Error('楽曲登録後の照合に失敗しました。');
     finalizeIdReservation_(reservation, true, '楽曲登録完了: ' + song.title);
     return {ok:true,songId:reservation.issuedId,title:song.title,artist:song.artist};
   } catch (e) {
