@@ -99,7 +99,6 @@ function saveNewSongLyricsForUniverse(payload) {
       return { ok:false, duplicate:true, songId:id_(duplicate.values[songsTable.map.SongID]), title:song.title, artist:song.artist };
     }
     assertUniverseServiceArtist_(ss, song.artist);
-    assertUniverseServiceOriginalSong_(songsTable, credits.originalSongId, '');
 
     const parsed = parseSongLyricsForUniverse({ userId:payload.userId, rawLyrics:rawLyrics });
     if (parsed.unknownGuests.length) throw new Error('未登録のSingerがあります: ' + parsed.unknownGuests.join('、'));
@@ -122,14 +121,13 @@ function saveNewSongLyricsForUniverse(payload) {
 
       const creditsSheet = requireSheet_(ss, BU1.SHEETS.SONG_CREDITS);
       const creditsTable = readTable_(creditsSheet);
-      requireColumns_(creditsTable, ['SongID','Title','Lyricists','Composers','Choreographers','OriginalSongID']);
+      requireColumns_(creditsTable, ['SongID','Title','Lyricists','Composers','Choreographers']);
       const creditValues = new Array(creditsTable.header.length).fill('');
       creditValues[creditsTable.map.SongID] = reservation.issuedId;
       creditValues[creditsTable.map.Title] = song.title;
       creditValues[creditsTable.map.Lyricists] = credits.lyricists;
       creditValues[creditsTable.map.Composers] = credits.composers;
       creditValues[creditsTable.map.Choreographers] = credits.choreographers;
-      creditValues[creditsTable.map.OriginalSongID] = credits.originalSongId;
       const creditRow = appendStyledRow_(creditsSheet, creditValues);
       rollback.push({sheet:creditsSheet,row:creditRow});
 
@@ -205,10 +203,9 @@ function saveSongCreditsForUniverse(payload) {
     const songsTable = readTable_(requireSheet_(ss, BU1.SHEETS.SONGS));
     const songRow = songsTable.rows.find(r => id_(r.values[songsTable.map.SongID]) === songId);
     if (!songRow) throw new Error('曲が見つかりません。');
-    assertUniverseServiceOriginalSong_(songsTable, credits.originalSongId, songId);
     const sheet = requireSheet_(ss, BU1.SHEETS.SONG_CREDITS);
     const table = readTable_(sheet);
-    requireColumns_(table, ['SongID','Title','Lyricists','Composers','Choreographers','OriginalSongID']);
+    requireColumns_(table, ['SongID','Title','Lyricists','Composers','Choreographers']);
     let row = table.rows.find(r => id_(r.values[table.map.SongID]) === songId);
     if (!row) {
       const values = new Array(table.header.length).fill('');
@@ -217,14 +214,12 @@ function saveSongCreditsForUniverse(payload) {
       values[table.map.Lyricists] = credits.lyricists;
       values[table.map.Composers] = credits.composers;
       values[table.map.Choreographers] = credits.choreographers;
-      values[table.map.OriginalSongID] = credits.originalSongId;
       appendStyledRow_(sheet, values);
     } else {
       sheet.getRange(row.rowNumber, table.map.Title + 1).setValue(clean_(songRow.values[songsTable.map.Title]));
       sheet.getRange(row.rowNumber, table.map.Lyricists + 1).setValue(credits.lyricists);
       sheet.getRange(row.rowNumber, table.map.Composers + 1).setValue(credits.composers);
       sheet.getRange(row.rowNumber, table.map.Choreographers + 1).setValue(credits.choreographers);
-      sheet.getRange(row.rowNumber, table.map.OriginalSongID + 1).setValue(credits.originalSongId);
     }
     SpreadsheetApp.flush();
     return { ok:true, songId:songId };
@@ -334,7 +329,7 @@ function normalizeUniverseServiceSong_(input) {
 }
 
 function normalizeUniverseServiceCredits_(input) {
-  return { lyricists:clean_(input.lyricists), composers:clean_(input.composers), choreographers:clean_(input.choreographers), originalSongId:id_(input.originalSongId) };
+  return { lyricists:clean_(input.lyricists), composers:clean_(input.composers), choreographers:clean_(input.choreographers) };
 }
 
 function assertUniverseServiceArtist_(ss, artist) {
@@ -346,11 +341,6 @@ function assertUniverseServiceArtist_(ss, artist) {
   if (!groupOk && !memberOk) throw new Error('ARTISTが登録済み候補にありません。');
 }
 
-function assertUniverseServiceOriginalSong_(songsTable, originalSongId, currentSongId) {
-  if (!originalSongId) return;
-  if (originalSongId === currentSongId) throw new Error('原曲に同じ曲は指定できません。');
-  if (!songsTable.rows.some(r => id_(r.values[songsTable.map.SongID]) === originalSongId)) throw new Error('原曲が見つかりません。');
-}
 
 function universeServiceSingerById_(ss) {
   const result = { '99':{id:'99',name:'ALL'}, '109':{id:'109',name:'その他'} };
