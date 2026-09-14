@@ -8,17 +8,35 @@ function syncPerformanceMetricRows(optionalSs, silent) {
   if (sheet.getLastRow() > 3) sheet.getRange(3, 1, sheet.getLastRow() - 2, lastCol).clearContent(); writeRows_(sheet, 3, 1, rows);
   if (!silent) alert_('秒数表同期', 'BE:FIRST ' + rows.length + '曲の行を同期しました。');
 }
+
+/**
+ * 11_PartTransfers は完全手動管理。
+ * この処理は必須値と重複だけを確認し、TransferIDを採番・変更しない。
+ */
 function confirmAndSyncPartTransfers() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet(); withDocumentLock_('パート移行', function () {
-    const t = readTable_(requireSheet_(ss, BU1.SHEETS.TRANSFERS)); requireColumns_(t, ['TransferID', 'SongID', 'PartOrder', 'FromMemberID', 'ToMemberID', 'TransferGroup']);
-    const incomplete = t.rows.filter(r => r.values.some(v => clean_(v)) && (!id_(r.values[t.map.SongID]) || !id_(r.values[t.map.PartOrder]) || !id_(r.values[t.map.FromMemberID]) || !id_(r.values[t.map.ToMemberID])));
-    if (incomplete.length) { alert_('パート移行を中止しました', '必須値が不足: ' + incomplete.map(r => r.rowNumber + '行').join(', ')); return; }
-    const blanks = t.rows.filter(r => !id_(r.values[t.map.TransferID]) && r.values.some(v => clean_(v)));
-    if (!confirm_('パート移行の確認', '新規ID採番: ' + blanks.length + '件\n保存しますか？')) return;
-    blanks.forEach(r => t.sheet.getRange(r.rowNumber, t.map.TransferID + 1).setValue('PT' + padNumber_(issueNumber_(ss, 'NEXT_TRANSFER_ID'), 4)));
-    alert_('パート移行', '確認・採番が完了しました。');
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  withDocumentLock_('パート移行確認', function () {
+    const t = readTable_(requireSheet_(ss, BU1.SHEETS.TRANSFERS));
+    requireColumns_(t, ['TransferID', 'SongID', 'PartOrder', 'FromMemberID', 'ToMemberID', 'TransferGroup']);
+    const errors = [];
+    const seen = {};
+    t.rows.forEach(r => {
+      if (!r.values.some(v => clean_(v))) return;
+      const transferId = id_(r.values[t.map.TransferID]);
+      const songId = id_(r.values[t.map.SongID]);
+      const partOrder = id_(r.values[t.map.PartOrder]);
+      const fromId = id_(r.values[t.map.FromMemberID]);
+      const toId = id_(r.values[t.map.ToMemberID]);
+      if (!transferId || !songId || !partOrder || !fromId || !toId) errors.push(r.rowNumber + '行目: 必須値が不足しています');
+      if (transferId) {
+        if (seen[transferId]) errors.push('TransferIDが重複しています: ' + transferId);
+        seen[transferId] = true;
+      }
+    });
+    alert_('パート移行確認', errors.length ? errors.join('\n') : '11_PartTransfers に入力上の問題はありません。自動変更は行っていません。');
   });
 }
+
 function deleteSelectedPartTransfer() {
   const ss = SpreadsheetApp.getActiveSpreadsheet(), sheet = ss.getActiveSheet();
   if (sheet.getName() !== BU1.SHEETS.TRANSFERS || sheet.getActiveRange().getRow() < 2) { alert_('削除', '11_PartTransfersの対象行を選択してください。'); return; }
