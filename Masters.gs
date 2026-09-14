@@ -34,7 +34,15 @@ function validateSongReleaseFields_(row, table, errors) {
 }
 
 function ensureSongCreditRow_(ss, songId, title, artist) {
-  if (artist !== 'BE:FIRST') return;
   const sheet = requireSheet_(ss, BU1.SHEETS.SONG_CREDITS), table = readTable_(sheet);
-  if (!table.rows.some(r => id_(r.values[table.map.SongID]) === String(songId))) appendStyledRow_(sheet, [songId, title, '', '', '']);
+  requireColumns_(table, ['SongID','Title','Lyricists','Composers','Choreographers','OriginalSongID']);
+  if (table.rows.some(r => id_(r.values[table.map.SongID]) === String(songId))) return;
+  const values = new Array(table.header.length).fill('');
+  values[table.map.SongID] = songId;
+  values[table.map.Title] = title;
+  values[table.map.Lyricists] = '';
+  values[table.map.Composers] = '';
+  values[table.map.Choreographers] = '';
+  values[table.map.OriginalSongID] = '';
+  appendStyledRow_(sheet, values);
 }
