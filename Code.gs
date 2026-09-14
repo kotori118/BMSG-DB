@@ -1,17 +1,18 @@
 /**
- * BMSG Universe 管理GAS v1.0
+ * BMSG Universe 管理GAS
  * 共通設定・メニュー・安全な読書きヘルパー
- *
- * このGASが書き込むのは、紐付け先の「BMSG Universe」だけ。
- * 旧サービス用Spreadsheet/GASへは書き込まない。
  */
 
 const BU1 = Object.freeze({
-  VERSION: '1.0.4',
+  VERSION: '1.1.0',
+  CORE_DB_ID: '1-1AY6-BACOaGW3HIgYS0UjFMPSh-cjvYMMnJ_UYoRFY',
+  LOG_DB_ID: '10vDKc_Q431iMDTTqB2A16i-Yp28oXSInoKiJXZtonRQ',
+  CARD_IMAGE_FOLDER_ID: '1ayh-EAbV585JqRofClrTHjBxNTQlfQBK',
+  ID_REGISTRY_SHEET: 'IDRegistry',
   SHEETS: Object.freeze({
     GUIDE: '00_管理ガイド', INPUT_LYRICS: '入力_歌詞',
     INPUT_PROFILE: '入力_プロフィール', INPUT_MEMBERSHIP: '入力_所属',
-    CONFIG: '00_Config', GROUPS: '01_Groups', MEMBERS: '02_Members',
+    GROUPS: '01_Groups', MEMBERS: '02_Members',
     GUESTS: '03_Guests', GROUP_MEMBERS: '04_GroupMembers',
     PROFILES: '05_Profiles', SONGS: '06_Songs', SONG_CREDITS: '07_SongCredits',
     LYRICS_PARTS: '08_LyricsParts', CARDS: '09_Images',
@@ -27,8 +28,12 @@ const BU1 = Object.freeze({
     'BE:FIRST': 1000, 'MAZZEL': 2000, 'STARGLOW': 3000, 'HANA': 4000,
     'DEFAULT': 5000,
   }),
-  SPECIAL_SINGERS: Object.freeze({ '99': 'ALL', '109': '' }),
+  SPECIAL_SINGERS: Object.freeze({ '99': 'ALL', '109': 'その他' }),
 });
+
+const BU_ID_REGISTRY_HEADERS_ = Object.freeze([
+  'EntityType','Scope','IssuedID','NumericValue','Status','RequestID','Source','IssuedAt','UpdatedAt','Note'
+]);
 
 function onOpen() {
   SpreadsheetApp.getUi().createMenu('BMSG Universe')
@@ -54,9 +59,10 @@ function validateUniverseStructure() {
     .map(name => '不足シート: ' + name);
   errors.push.apply(errors, validateRequiredHeaders_(ss));
   errors.push.apply(errors, validateUniqueIds_(ss));
+  try { idRegistryTable_(); } catch (e) { errors.push(e.message); }
   alert_('BMSG Universe 構成検証', errors.length
     ? errors.join('\n')
-    : 'シート構成・必須ヘッダー・主要ID重複に問題はありません。');
+    : 'シート構成・必須ヘッダー・主要ID重複・IDRegistryに問題はありません。');
   return { ok: errors.length === 0, errors: errors };
 }
 
@@ -68,9 +74,9 @@ function validateRequiredHeaders_(ss) {
   defs[BU1.SHEETS.GROUP_MEMBERS] = ['GroupID', 'MemberID', 'DisplayOrder'];
   defs[BU1.SHEETS.PROFILES] = ['MemberID'];
   defs[BU1.SHEETS.SONGS] = ['SongID', 'Title', 'Artist', 'ReleaseDate', 'Form', 'CDTitle', 'IsTitleTrack'];
-  defs[BU1.SHEETS.SONG_CREDITS] = ['SongID', 'Title', 'Lyricists', 'Composers', 'Choreographers'];
+  defs[BU1.SHEETS.SONG_CREDITS] = ['SongID', 'Title', 'Lyricists', 'Composers', 'Choreographers', 'OriginalSongID'];
   defs[BU1.SHEETS.LYRICS_PARTS] = ['SongID', 'PartOrder', 'Singer', 'Lyrics'];
-  defs[BU1.SHEETS.CARDS] = ['CardID', 'MemberID', 'Rarity', 'DriveFileID', 'DisplayOrder'];
+  defs[BU1.SHEETS.CARDS] = ['ImageID', 'TargetType', 'TargetID', 'Rarity', 'DriveFileID', 'DisplayOrder', 'IsProfileMain'];
   defs[BU1.SHEETS.TRANSFERS] = ['TransferID', 'SongID', 'PartOrder', 'FromMemberID', 'ToMemberID', 'TransferGroup'];
   const errors = [];
   Object.keys(defs).forEach(name => {
@@ -85,7 +91,7 @@ function validateRequiredHeaders_(ss) {
 function validateUniqueIds_(ss) {
   const targets = [[BU1.SHEETS.GROUPS, 'GroupID'], [BU1.SHEETS.MEMBERS, 'MemberID'],
     [BU1.SHEETS.GUESTS, 'GuestID'], [BU1.SHEETS.SONGS, 'SongID'],
-    [BU1.SHEETS.CARDS, 'CardID'], [BU1.SHEETS.TRANSFERS, 'TransferID']];
+    [BU1.SHEETS.CARDS, 'ImageID'], [BU1.SHEETS.TRANSFERS, 'TransferID']];
   const errors = [];
   targets.forEach(t => {
     const table = readTable_(requireSheet_(ss, t[0]));
@@ -104,9 +110,17 @@ function validateUniqueIds_(ss) {
 
 function withDocumentLock_(label, fn) {
   const lock = LockService.getDocumentLock();
-  if (!lock.tryLock(10000)) throw new Error(label + ': 別の更新処理が実行中です。');
+  if (!lock || !lock.tryLock(10000)) throw new Error(label + ': 別の更新処理が実行中です。');
   try { return fn(); } finally { lock.releaseLock(); }
 }
+
+function withSharedWriterLock_(label, fn) {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(30000)) throw new Error(label + ': 別の更新処理が実行中です。');
+  try { return fn(); } finally { lock.releaseLock(); }
+}
+
+function openCoreSpreadsheet_() { return SpreadsheetApp.openById(BU1.CORE_DB_ID); }
 
 function requireSheet_(ss, name) {
   const sheet = ss.getSheetByName(name);
@@ -169,34 +183,115 @@ function displayDate_(value) {
   return Utilities.formatDate(normalizeDateForSheet_(value), 'Asia/Tokyo', 'yyyy-MM-dd');
 }
 
-function configTable_(ss) {
-  const table = readTable_(requireSheet_(ss, BU1.SHEETS.CONFIG));
-  requireColumns_(table, ['Key', 'Value', 'ValueType', 'Description']);
-  const byKey = {};
-  table.rows.forEach(row => { const key = clean_(row.values[table.map.Key]); if (key) byKey[key] = row; });
-  table.byKey = byKey;
+function idRegistryTable_() {
+  const ss = SpreadsheetApp.openById(BU1.LOG_DB_ID);
+  const sheet = ss.getSheetByName(BU1.ID_REGISTRY_SHEET);
+  if (!sheet) throw new Error('BMSG_ Universe_Log に IDRegistry シートがありません');
+  const table = readTable_(sheet);
+  requireColumns_(table, BU_ID_REGISTRY_HEADERS_);
   return table;
 }
 
-function getConfig_(ss, key, fallback) {
-  const table = configTable_(ss);
-  const row = table.byKey[key];
-  return row ? row.values[table.map.Value] : fallback;
+function resolveIssueSpec_(ss, key) {
+  let m;
+  if (key === 'NEXT_GROUP_ID') {
+    return { entity:'GROUP', scope:'GLOBAL', liveMax:maxNumericColumn_(requireSheet_(ss, BU1.SHEETS.GROUPS), 'GroupID') };
+  }
+  if ((m = String(key).match(/^NEXT_MEMBER_ID_(\d+)$/))) {
+    const band = Number(m[1]);
+    return { entity:'MEMBER', scope:String(band), liveMax:maxNumericColumnInBand_(requireSheet_(ss, BU1.SHEETS.MEMBERS), 'MemberID', band, band + 99) };
+  }
+  if (key === 'NEXT_GUEST_ID') {
+    return { entity:'GUEST', scope:'GLOBAL', liveMax:maxNumericColumn_(requireSheet_(ss, BU1.SHEETS.GUESTS), 'GuestID') };
+  }
+  if ((m = String(key).match(/^NEXT_SONG_ID_(\d+)$/))) {
+    const band = Number(m[1]);
+    return { entity:'SONG', scope:String(band), liveMax:maxNumericColumnInBand_(requireSheet_(ss, BU1.SHEETS.SONGS), 'SongID', band, band + 999) };
+  }
+  if (key === 'NEXT_PROFILE_ID') {
+    return { entity:'PROFILE', scope:'GLOBAL', liveMax:maxProfileNumber_(ss), formatter:function(n){ return 'P' + padNumber_(n, 3); } };
+  }
+  if (key === 'NEXT_IMAGE_ID') throw new Error('ImageIDはBMSG-PJの画像管理だけが発行します。');
+  if (key === 'NEXT_TRANSFER_ID') throw new Error('11_PartTransfersは完全手動管理です。TransferIDは自動採番しません。');
+  throw new Error('未対応の採番キーです: ' + key);
 }
 
-function setConfig_(ss, key, value) {
-  const table = configTable_(ss);
-  const row = table.byKey[key];
-  if (!row) throw new Error('00_Configに「' + key + '」がありません');
-  table.sheet.getRange(row.rowNumber, table.map.Value + 1).setValue(value);
-  if (table.map.UpdatedAt != null) table.sheet.getRange(row.rowNumber, table.map.UpdatedAt + 1).setValue(new Date());
+function maxNumericColumn_(sheet, headerName) {
+  const table = readTable_(sheet), col = table.map[headerName];
+  if (col == null) throw new Error(sheet.getName() + ' に列「' + headerName + '」がありません');
+  return table.rows.reduce(function(max,row){ const n=Number(id_(row.values[col])); return Number.isFinite(n)?Math.max(max,n):max; }, 0);
+}
+
+function maxNumericColumnInBand_(sheet, headerName, min, maxAllowed) {
+  const table = readTable_(sheet), col = table.map[headerName];
+  if (col == null) throw new Error(sheet.getName() + ' に列「' + headerName + '」がありません');
+  return table.rows.reduce(function(max,row){
+    const n=Number(id_(row.values[col]));
+    return Number.isFinite(n) && n >= min && n <= maxAllowed ? Math.max(max,n) : max;
+  }, min - 1);
+}
+
+function maxProfileNumber_(ss) {
+  let max = 0;
+  const profiles = requireSheet_(ss, BU1.SHEETS.PROFILES);
+  const headers = profiles.getRange(1,1,1,Math.max(1,profiles.getLastColumn())).getDisplayValues()[0];
+  headers.forEach(function(value){ const m=String(value||'').trim().match(/^P(\d+)$/i); if(m) max=Math.max(max,Number(m[1])); });
+  try {
+    const log = SpreadsheetApp.openById(BU1.LOG_DB_ID).getSheetByName('ProfileSettings');
+    if (log) {
+      const values = log.getDataRange().getDisplayValues();
+      const col = (values[0] || []).indexOf('ProfileID');
+      if (col >= 0) values.slice(1).forEach(function(row){ const m=String(row[col]||'').trim().match(/^P(\d+)$/i); if(m) max=Math.max(max,Number(m[1])); });
+    }
+  } catch (e) {}
+  return max;
+}
+
+function reserveNumberForKey_(ss, key, source, note) {
+  const spec = resolveIssueSpec_(ss, key);
+  const table = idRegistryTable_();
+  let registryMax = 0;
+  table.rows.forEach(function(row){
+    if (clean_(row.values[table.map.EntityType]).toUpperCase() !== spec.entity) return;
+    if (clean_(row.values[table.map.Scope]) !== spec.scope) return;
+    const n = Number(row.values[table.map.NumericValue]);
+    if (Number.isFinite(n)) registryMax = Math.max(registryMax, n);
+  });
+  const numeric = Math.max(spec.liveMax || 0, registryMax) + 1;
+  const issuedId = spec.formatter ? spec.formatter(numeric) : String(numeric);
+  const requestId = Utilities.getUuid();
+  const now = new Date().toISOString();
+  const values = new Array(table.header.length).fill('');
+  values[table.map.EntityType] = spec.entity;
+  values[table.map.Scope] = spec.scope;
+  values[table.map.IssuedID] = issuedId;
+  values[table.map.NumericValue] = numeric;
+  values[table.map.Status] = 'RESERVED';
+  values[table.map.RequestID] = requestId;
+  values[table.map.Source] = source || 'BMSG-DB';
+  values[table.map.IssuedAt] = now;
+  values[table.map.UpdatedAt] = now;
+  values[table.map.Note] = note || '';
+  const rowNumber = appendStyledRow_(table.sheet, values);
+  return { key:key, entityType:spec.entity, scope:spec.scope, issuedId:issuedId, numericValue:numeric, requestId:requestId, rowNumber:rowNumber };
+}
+
+function finalizeIdReservation_(reservation, committed, note) {
+  if (!reservation || !reservation.requestId) return;
+  const table = idRegistryTable_();
+  const row = table.rows.find(function(r){ return clean_(r.values[table.map.RequestID]) === reservation.requestId; });
+  if (!row) throw new Error('IDRegistryの予約情報を確認できません: ' + reservation.requestId);
+  table.sheet.getRange(row.rowNumber, table.map.Status + 1).setValue(committed ? 'COMMITTED' : 'ABORTED');
+  table.sheet.getRange(row.rowNumber, table.map.UpdatedAt + 1).setValue(new Date().toISOString());
+  if (note != null) table.sheet.getRange(row.rowNumber, table.map.Note + 1).setValue(String(note));
 }
 
 function issueNumber_(ss, key) {
-  const current = Number(getConfig_(ss, key, 0));
-  if (!Number.isFinite(current) || current <= 0) throw new Error('00_Config.' + key + 'が正しい番号ではありません');
-  setConfig_(ss, key, current + 1);
-  return current;
+  return withSharedWriterLock_('ID採番', function(){
+    const reservation = reserveNumberForKey_(ss, key, 'BMSG-DB_LEGACY', '旧管理ルートからの採番');
+    finalizeIdReservation_(reservation, true, '旧管理ルートで発行済み');
+    return reservation.numericValue;
+  });
 }
 
 function confirm_(title, body) {
@@ -208,10 +303,6 @@ function writeRows_(sheet, startRow, startColumn, rows) {
   if (rows.length) sheet.getRange(startRow, startColumn, rows.length, rows[0].length).setValues(rows);
 }
 
-/**
- * 行・列を追加したとき、既存シートの見た目と入力規則を継承する。
- * 値はコピーしない。
- */
 function copyColumnPresentation_(sheet, sourceCol, targetCol) {
   if (!sourceCol || !targetCol || sourceCol === targetCol) return;
   const rows = sheet.getMaxRows();
@@ -252,7 +343,6 @@ function appendStyledRow_(sheet, values, templateRow) {
   return targetRow;
 }
 
-/** Basic filter の条件を保持したまま、新しい行・列まで範囲を広げる。 */
 function expandBasicFilter_(sheet, requiredLastRow, requiredLastCol) {
   const filter = sheet.getFilter();
   if (!filter) return;
@@ -262,7 +352,6 @@ function expandBasicFilter_(sheet, requiredLastRow, requiredLastCol) {
   const lastRow = Math.max(range.getLastRow(), requiredLastRow || range.getLastRow());
   const lastCol = Math.max(range.getLastColumn(), requiredLastCol || range.getLastColumn());
   if (lastRow === range.getLastRow() && lastCol === range.getLastColumn()) return;
-
   const criteria = [];
   for (let c = startCol; c <= range.getLastColumn(); c++) {
     const criterion = filter.getColumnFilterCriteria(c);
