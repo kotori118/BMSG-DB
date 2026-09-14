@@ -21,10 +21,7 @@ jobs:
         run: npm install -g @google/clasp
 
       - name: Create clasprc.json
-        run: |
-          cat <<EOF > ~/.clasprc.json
-          ${{ secrets.CLASPRC_JSON }}
-          EOF
+        run: echo '${{ secrets.CLASPRC_JSON_KEY }}' > ~/.clasprc.json
 
       - name: Create clasp project binding
         run: echo '{"scriptId":"1NiJ94p1UVFGxd3DrNXz0x3MFC1haPopa11LQy593-3ft4exsoJM4huwZ","rootDir":"."}' > .clasp.json
