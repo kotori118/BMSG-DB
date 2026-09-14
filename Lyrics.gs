@@ -398,24 +398,22 @@ function findUnknownLyricsGuestCandidates_(raw, masters) {
 function confirmAndRegisterLyricsGuests_(ss, names) {
   const result = { registered: [], ignored: [] };
   if (!names.length) return result;
-  const sheet = requireLyricsSheet_(ss, BU_LYRICS.SHEETS.GUESTS);
-
-  names.forEach(name => {
+  names.forEach(function(name) {
     const yes = confirm_(
       '未登録Guest候補',
       '歌唱者候補「' + name + '」は02_Members／03_Guestsに未登録です。\n\n' +
       '［はい］Guestとして03_Guestsへ登録し、この行を歌唱者の区切りとして扱う\n' +
       '［いいえ］Guestではない。この行は区切らずLyrics本文として残す'
     );
-    if (!yes) {
-      result.ignored.push(name);
-      return;
-    }
-    appendStyledRow_(sheet, [String(issueNumber_(ss, 'NEXT_GUEST_ID')), name]);
-    result.registered.push(name);
+    if (!yes) { result.ignored.push(name); return; }
+    const saved = withSharedWriterLock_('Guest登録', function() {
+      return registerGuestCore_(ss, name, {source:'BMSG-DB_LEGACY',notePrefix:'Spreadsheet 歌詞解析 Guest登録'});
+    });
+    if (saved && saved.ok) result.registered.push(name);
   });
   return result;
 }
+
 function loadLyricsGroups_(ss) {
   const sheet = requireLyricsSheet_(ss, BU_LYRICS.SHEETS.GROUPS);
   const values = sheet.getDataRange().getDisplayValues();
