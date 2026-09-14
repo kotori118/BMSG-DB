@@ -262,7 +262,7 @@ function registerGuestCore_(ss, name, context) {
   requireColumns_(guestTable, ['GuestID','DisplayName']);
   const existingRowNumber = Number(context.existingRowNumber || 0);
   if (memberTable.rows.some(function(r){ return clean_(r.values[memberTable.map.DisplayName]) === name; })) {
-    throw new Error('同名のメンバーが登録済みです: ' + name);
+    return {ok:true, alreadyExists:true, name:name};
   }
   const duplicateGuests = guestTable.rows.filter(function(r){
     return clean_(r.values[guestTable.map.DisplayName]) === name && r.rowNumber !== existingRowNumber;
@@ -428,18 +428,35 @@ function replaceSongPartsCore_(ss, songId, incoming) {
 function getLegacyDirectMastersPlan_() {
   const ss = openCoreSpreadsheet_();
   const errors = [];
+  const members = readTable_(requireSheet_(ss, BU1.SHEETS.MEMBERS));
   const guests = readTable_(requireSheet_(ss, BU1.SHEETS.GUESTS));
-  requireColumns_(guests, ['GuestID','DisplayName']);
-  const guestRows = guests.rows.filter(function(r){ return !id_(r.values[guests.map.GuestID]) && clean_(r.values[guests.map.DisplayName]); });
   const songs = readTable_(requireSheet_(ss, BU1.SHEETS.SONGS));
+  requireColumns_(members, ['DisplayName']);
+  requireColumns_(guests, ['GuestID','DisplayName']);
   requireColumns_(songs, ['SongID','Title','Artist','ReleaseDate','Form','CDTitle','IsTitleTrack']);
-  const songRows = songs.rows.filter(function(r){ return !id_(r.values[songs.map.SongID]) && r.values.some(function(v){return !!clean_(v);}); });
+
+  const memberNames = {};
+  members.rows.forEach(function(r){ const name=clean_(r.values[members.map.DisplayName]); if(name) memberNames[name]=true; });
+  const committedGuestNames = {};
+  guests.rows.forEach(function(r){ const name=clean_(r.values[guests.map.DisplayName]); if(name && id_(r.values[guests.map.GuestID])) committedGuestNames[name]=true; });
+  const guestRows = guests.rows.filter(function(r){ return !id_(r.values[guests.map.GuestID]) && clean_(r.values[guests.map.DisplayName]); });
   const guestNames = {};
   guestRows.forEach(function(r){
     const name = clean_(r.values[guests.map.DisplayName]);
-    if (guestNames[name]) errors.push('Guest名が重複しています: ' + name);
+    if (memberNames[name]) errors.push(r.rowNumber + '行目: 同名のメンバーが登録済みです: ' + name);
+    if (committedGuestNames[name]) errors.push(r.rowNumber + '行目: 同名のGuestが登録済みです: ' + name);
+    if (guestNames[name]) errors.push('Guest名が未採番行で重複しています: ' + name);
     guestNames[name] = true;
   });
+
+  const songRows = songs.rows.filter(function(r){ return !id_(r.values[songs.map.SongID]) && r.values.some(function(v){return !!clean_(v);}); });
+  const committedSongKeys = {};
+  songs.rows.forEach(function(r){
+    if (!id_(r.values[songs.map.SongID])) return;
+    const title=clean_(r.values[songs.map.Title]), artist=clean_(r.values[songs.map.Artist]);
+    if(title && artist) committedSongKeys[title+'\u0000'+artist]=true;
+  });
+  const pendingSongKeys = {};
   songRows.forEach(function(r){
     try {
       if (!clean_(r.values[songs.map.ReleaseDate])) throw new Error('ReleaseDateが必須です');
@@ -448,6 +465,10 @@ function getLegacyDirectMastersPlan_() {
         form:r.values[songs.map.Form], cdTitle:r.values[songs.map.CDTitle], isTitleTrack:r.values[songs.map.IsTitleTrack]
       });
       assertUniverseServiceArtist_(ss, song.artist);
+      const key=song.title+'\u0000'+song.artist;
+      if (committedSongKeys[key]) throw new Error('同じTitle＋Artistの曲が登録済みです');
+      if (pendingSongKeys[key]) throw new Error('同じTitle＋Artistが未採番行で重複しています');
+      pendingSongKeys[key]=true;
     } catch (e) { errors.push(r.rowNumber + '行目: ' + e.message); }
   });
   return {
@@ -458,6 +479,7 @@ function getLegacyDirectMastersPlan_() {
     errors:errors
   };
 }
+
 
 function commitLegacyDirectMasters_() {
   return withSharedWriterLock_('Guest・楽曲同期', function(){
