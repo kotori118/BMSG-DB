@@ -1,0 +1,54 @@
+name: Cleanup OriginalSong
+on:
+  push:
+    paths:
+      - '.github/workflows/cleanup-original-song.yml'
+permissions:
+  contents: write
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: cleanup-original-song-20260914
+      - name: Remove OriginalSong references
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          import re
+
+          p=Path('Code.gs')
+          s=p.read_text()
+          s=s.replace("['SongID', 'Title', 'Lyricists', 'Composers', 'Choreographers', 'OriginalSongID']", "['SongID', 'Title', 'Lyricists', 'Composers', 'Choreographers']")
+          p.write_text(s)
+
+          p=Path('Masters.gs')
+          s=p.read_text()
+          s=s.replace("['SongID','Title','Lyricists','Composers','Choreographers','OriginalSongID']", "['SongID','Title','Lyricists','Composers','Choreographers']")
+          s=re.sub(r"\n\s*values\[table\.map\.OriginalSongID\]\s*=\s*'';", '', s)
+          p.write_text(s)
+
+          p=Path('UniverseService.gs')
+          s=p.read_text()
+          s=re.sub(r"\n\s*assertUniverseServiceOriginalSong_\([^\n]*\);", '', s)
+          s=s.replace("['SongID','Title','Lyricists','Composers','Choreographers','OriginalSongID']", "['SongID','Title','Lyricists','Composers','Choreographers']")
+          s=re.sub(r"\n\s*creditValues\[creditsTable\.map\.OriginalSongID\]\s*=\s*credits\.originalSongId;", '', s)
+          s=re.sub(r"\n\s*values\[table\.map\.OriginalSongID\]\s*=\s*credits\.originalSongId;", '', s)
+          s=re.sub(r"\n\s*sheet\.getRange\(row\.rowNumber, table\.map\.OriginalSongID \+ 1\)\.setValue\(credits\.originalSongId\);", '', s)
+          s=re.sub(r",?\s*originalSongId\s*:\s*id_\([^\n]*?\)", '', s)
+          s=re.sub(r"\nfunction assertUniverseServiceOriginalSong_\([\s\S]*?\n}\n", '\n', s)
+          p.write_text(s)
+          PY
+      - name: Verify cleanup
+        run: |
+          ! grep -RInE 'OriginalSongID|originalSongId|assertUniverseServiceOriginalSong_' --include='*.gs' .
+          grep -q "SONG_CREDITS.*\['SongID', 'Title', 'Lyricists', 'Composers', 'Choreographers'\]" Code.gs || grep -q "defs\[BU1.SHEETS.SONG_CREDITS\] = \['SongID', 'Title', 'Lyricists', 'Composers', 'Choreographers'\]" Code.gs
+      - name: Commit cleanup
+        run: |
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add Code.gs Masters.gs UniverseService.gs
+          git diff --cached --quiet && exit 0
+          git commit -m 'Remove OriginalSong support from shared writer'
+          git push origin HEAD:cleanup-original-song-20260914
