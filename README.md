@@ -24,6 +24,7 @@ BMSG Universe の Core DB 管理・移行用 Apps Script。
 ## GitHub Actions
 
 `main` への push で clasp により指定Apps Scriptへ push し、BMSG-PJ から参照するライブラリ用バージョンを作成する。
+GitHub Actions の clasp 認証は BMSG-PJ と同じ `CLASPRC_JSON_KEY` Secret 名を使用する。
 
 対象 Script ID:
 
