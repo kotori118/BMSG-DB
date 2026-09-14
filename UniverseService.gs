@@ -14,7 +14,14 @@ function parseSongLyricsForUniverse(payload) {
   if (!raw.trim()) throw new Error('歌詞を入力してください。');
   const ss = openCoreSpreadsheet_();
   const masters = loadLyricsSingers_(ss);
-  const unknownGuests = findUnknownLyricsGuestCandidates_(raw, { singers: masters });
+  const ignoredGuests = {};
+  (Array.isArray(payload.ignoredGuestCandidates) ? payload.ignoredGuestCandidates : []).forEach(function(name) {
+    const key = universeServiceGuestCandidateKey_(name);
+    if (key) ignoredGuests[key] = true;
+  });
+  const unknownGuests = findUnknownLyricsGuestCandidates_(raw, { singers: masters }).filter(function(name) {
+    return !ignoredGuests[universeServiceGuestCandidateKey_(name)];
+  });
   const errors = [];
   const parts = parseLyricsParts_(normalizeLineEndings_(raw).split('\n'), masters, errors);
   if (!parts.length) errors.push('歌詞パートを作成できませんでした。');
@@ -36,6 +43,11 @@ function parseSongLyricsForUniverse(payload) {
     errors: errors,
     canRegister: unknownGuests.length === 0 && errors.length === 0
   };
+}
+
+function universeServiceGuestCandidateKey_(value) {
+  const text = String(value == null ? '' : value).trim();
+  return typeof text.normalize === 'function' ? text.normalize('NFKC') : text;
 }
 
 function registerSongLyricsGuestForUniverse(payload) {
@@ -60,7 +72,11 @@ function saveNewSongLyricsForUniverse(payload) {
   const rawLyrics = String(payload.rawLyrics || '');
   if (!rawLyrics.trim()) throw new Error('歌詞を入力してください。');
 
-  const parsed = parseSongLyricsForUniverse({ userId:payload.userId, rawLyrics:rawLyrics });
+  const parsed = parseSongLyricsForUniverse({
+    userId:payload.userId,
+    rawLyrics:rawLyrics,
+    ignoredGuestCandidates:payload.ignoredGuestCandidates
+  });
   if (parsed.unknownGuests.length) throw new Error('未登録のSingerがあります: ' + parsed.unknownGuests.join('、'));
   if (!parsed.canRegister) throw new Error((parsed.errors || ['歌詞を解析できませんでした。']).join('\n'));
 
