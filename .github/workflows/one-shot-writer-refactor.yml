@@ -10,452 +10,67 @@ permissions:
   contents: write
 
 jobs:
-  refactor:
+  cleanup:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
-      - name: Refactor legacy DB writers into shared writer service
+      - name: Route legacy Guest registration through shared writer
         run: |
           python <<'PY'
           from pathlib import Path
 
           def replace_function(text, name, replacement):
-              marker = f'function {name}('
-              start = text.find(marker)
-              if start < 0:
-                  raise SystemExit(f'function not found: {name}')
-              brace = text.find('{', start)
-              if brace < 0:
-                  raise SystemExit(f'opening brace not found: {name}')
-              i = brace
-              depth = 0
-              quote = None
-              escape = False
-              line_comment = False
-              block_comment = False
-              while i < len(text):
-                  c = text[i]
-                  n = text[i+1] if i + 1 < len(text) else ''
-                  if line_comment:
-                      if c == '\n': line_comment = False
-                  elif block_comment:
-                      if c == '*' and n == '/':
-                          block_comment = False; i += 1
+              start=text.find(f'function {name}(')
+              if start<0: raise SystemExit(f'function not found: {name}')
+              brace=text.find('{',start); depth=0; quote=None; esc=False; line=False; block=False; i=brace
+              while i<len(text):
+                  c=text[i]; n=text[i+1] if i+1<len(text) else ''
+                  if line:
+                      if c=='\n': line=False
+                  elif block:
+                      if c=='*' and n=='/': block=False; i+=1
                   elif quote:
-                      if escape: escape = False
-                      elif c == '\\': escape = True
-                      elif c == quote: quote = None
+                      if esc: esc=False
+                      elif c=='\\': esc=True
+                      elif c==quote: quote=None
                   else:
-                      if c == '/' and n == '/': line_comment = True; i += 1
-                      elif c == '/' and n == '*': block_comment = True; i += 1
-                      elif c in ('\"', "'", '`'): quote = c
-                      elif c == '{': depth += 1
-                      elif c == '}':
-                          depth -= 1
-                          if depth == 0:
-                              end = i + 1
-                              return text[:start] + replacement.rstrip() + '\n' + text[end:]
-                  i += 1
-              raise SystemExit(f'closing brace not found: {name}')
+                      if c=='/' and n=='/': line=True; i+=1
+                      elif c=='/' and n=='*': block=True; i+=1
+                      elif c in ('\"',"'",'`'): quote=c
+                      elif c=='{': depth+=1
+                      elif c=='}':
+                          depth-=1
+                          if depth==0: return text[:start]+replacement.rstrip()+'\n'+text[i+1:]
+                  i+=1
+              raise SystemExit('unclosed function')
 
-          service = Path('UniverseService.gs')
-          text = service.read_text()
-
-          text = replace_function(text, 'registerSongLyricsGuestForUniverse', r'''function registerSongLyricsGuestForUniverse(payload) {
-            payload = payload || {};
-            requireUniverseServiceUser_(payload.userId);
-            const name = clean_(payload.name);
-            if (!name) throw new Error('Guest名を入力してください。');
-            return withSharedWriterLock_('Guest登録', function() {
-              return registerGuestCore_(openCoreSpreadsheet_(), name, {
-                source:'BMSG-DB_UNIVERSE',
-                notePrefix:'Universe Guest登録'
+          p=Path('Lyrics.gs'); text=p.read_text()
+          text=replace_function(text,'confirmAndRegisterLyricsGuests_',r'''function confirmAndRegisterLyricsGuests_(ss, names) {
+            const result = { registered: [], ignored: [] };
+            if (!names.length) return result;
+            names.forEach(function(name) {
+              const yes = confirm_(
+                '未登録Guest候補',
+                '歌唱者候補「' + name + '」は02_Members／03_Guestsに未登録です。\n\n' +
+                '［はい］Guestとして03_Guestsへ登録し、この行を歌唱者の区切りとして扱う\n' +
+                '［いいえ］Guestではない。この行は区切らずLyrics本文として残す'
+              );
+              if (!yes) { result.ignored.push(name); return; }
+              const saved = withSharedWriterLock_('Guest登録', function() {
+                return registerGuestCore_(ss, name, {source:'BMSG-DB_LEGACY',notePrefix:'Spreadsheet 歌詞解析 Guest登録'});
               });
+              if (saved && saved.ok) result.registered.push(name);
             });
+            return result;
           }''')
-
-          text = replace_function(text, 'saveNewSongLyricsForUniverse', r'''function saveNewSongLyricsForUniverse(payload) {
-            payload = payload || {};
-            requireUniverseServiceUser_(payload.userId);
-            const song = normalizeUniverseServiceSong_(payload.song || {});
-            const credits = normalizeUniverseServiceCredits_(payload.credits || {});
-            const rawLyrics = String(payload.rawLyrics || '');
-            if (!rawLyrics.trim()) throw new Error('歌詞を入力してください。');
-
-            const parsed = parseSongLyricsForUniverse({ userId:payload.userId, rawLyrics:rawLyrics });
-            if (parsed.unknownGuests.length) throw new Error('未登録のSingerがあります: ' + parsed.unknownGuests.join('、'));
-            if (!parsed.canRegister) throw new Error((parsed.errors || ['歌詞を解析できませんでした。']).join('\n'));
-
-            return withSharedWriterLock_('新規楽曲登録', function() {
-              return createSongWithPartsCore_(openCoreSpreadsheet_(), song, credits, parsed.parts, {
-                source:'BMSG-DB_UNIVERSE',
-                notePrefix:'Universe 新規曲'
-              });
-            });
-          }''')
-
-          text = replace_function(text, 'saveSongPartsForUniverse', r'''function saveSongPartsForUniverse(payload) {
-            payload = payload || {};
-            requireUniverseServiceUser_(payload.userId);
-            const songId = id_(payload.songId);
-            if (!songId) throw new Error('SongIDがありません。');
-            const incoming = Array.isArray(payload.parts) ? payload.parts : [];
-            if (!incoming.length) throw new Error('歌詞パートがありません。');
-            return withSharedWriterLock_('歌詞保存', function() {
-              return replaceSongPartsCore_(openCoreSpreadsheet_(), songId, incoming);
-            });
-          }''')
-
-          helpers = r'''
-
-          /**
-           * Shared writer internals.
-           * Universe UI and legacy spreadsheet routes both mutate DB only through
-           * these helpers / wrappers. Feature files may collect input and confirm,
-           * but must not write Song / Lyrics / Guest master rows directly.
-           */
-          function registerGuestCore_(ss, name, context) {
-            context = context || {};
-            name = clean_(name);
-            if (!name) throw new Error('Guest名を入力してください。');
-            const memberTable = readTable_(requireSheet_(ss, BU1.SHEETS.MEMBERS));
-            const guestSheet = requireSheet_(ss, BU1.SHEETS.GUESTS);
-            const guestTable = readTable_(guestSheet);
-            requireColumns_(memberTable, ['DisplayName']);
-            requireColumns_(guestTable, ['GuestID','DisplayName']);
-            const existingRowNumber = Number(context.existingRowNumber || 0);
-            if (memberTable.rows.some(function(r){ return clean_(r.values[memberTable.map.DisplayName]) === name; })) {
-              throw new Error('同名のメンバーが登録済みです: ' + name);
-            }
-            const duplicateGuests = guestTable.rows.filter(function(r){
-              return clean_(r.values[guestTable.map.DisplayName]) === name && r.rowNumber !== existingRowNumber;
-            });
-            if (duplicateGuests.length) {
-              const committed = duplicateGuests.find(function(r){ return !!id_(r.values[guestTable.map.GuestID]); });
-              if (committed) return {ok:true, alreadyExists:true, guestId:id_(committed.values[guestTable.map.GuestID]), name:name};
-              throw new Error('Guest名が複数行に入力されています: ' + name);
-            }
-
-            const reservation = reserveNumberForKey_(ss, 'NEXT_GUEST_ID', context.source || 'BMSG-DB', (context.notePrefix || 'Guest登録') + ': ' + name);
-            let appendedRow = 0;
-            try {
-              if (existingRowNumber) {
-                const fresh = readTable_(guestSheet);
-                const row = fresh.rows.find(function(r){ return r.rowNumber === existingRowNumber; });
-                if (!row || id_(row.values[fresh.map.GuestID]) || clean_(row.values[fresh.map.DisplayName]) !== name) throw new Error('Guest入力行が変更されています。もう一度確認してください。');
-                guestSheet.getRange(existingRowNumber, fresh.map.GuestID + 1).setValue(reservation.issuedId);
-              } else {
-                const values = new Array(guestTable.header.length).fill('');
-                values[guestTable.map.GuestID] = reservation.issuedId;
-                values[guestTable.map.DisplayName] = name;
-                appendedRow = appendStyledRow_(guestSheet, values);
-              }
-              SpreadsheetApp.flush();
-              const verify = readTable_(guestSheet).rows.filter(function(r){
-                return id_(r.values[guestTable.map.GuestID]) === reservation.issuedId && clean_(r.values[guestTable.map.DisplayName]) === name;
-              });
-              if (verify.length !== 1) throw new Error('Guest登録後の照合に失敗しました。');
-              finalizeIdReservation_(reservation, true, 'Guest登録完了: ' + name);
-              return {ok:true, guestId:reservation.issuedId, name:name};
-            } catch (e) {
-              if (existingRowNumber) {
-                try {
-                  const current = guestSheet.getRange(existingRowNumber, guestTable.map.GuestID + 1);
-                  if (id_(current.getValue()) === reservation.issuedId) current.clearContent();
-                } catch (ignore) {}
-              } else if (appendedRow) {
-                try { guestSheet.deleteRow(appendedRow); } catch (ignore) {}
-              }
-              try { finalizeIdReservation_(reservation, false, 'Guest登録失敗: ' + name); } catch (ignore) {}
-              throw e;
-            }
-          }
-
-          function createSongWithPartsCore_(ss, song, credits, parsedParts, context) {
-            context = context || {};
-            const songsSheet = requireSheet_(ss, BU1.SHEETS.SONGS);
-            const songsTable = readTable_(songsSheet);
-            requireColumns_(songsTable, ['SongID','Title','Artist','ReleaseDate','Form','CDTitle','IsTitleTrack']);
-            const duplicate = songsTable.rows.find(function(r){
-              return clean_(r.values[songsTable.map.Title]) === song.title && clean_(r.values[songsTable.map.Artist]) === song.artist;
-            });
-            if (duplicate) return {ok:false, duplicate:true, songId:id_(duplicate.values[songsTable.map.SongID]), title:song.title, artist:song.artist};
-            assertUniverseServiceArtist_(ss, song.artist);
-            const parts = Array.isArray(parsedParts) ? parsedParts : [];
-            if (!parts.length) throw new Error('歌詞パートがありません。');
-
-            const band = BU1.SONG_BANDS[song.artist] || BU1.SONG_BANDS.DEFAULT;
-            const reservation = reserveNumberForKey_(ss, 'NEXT_SONG_ID_' + band, context.source || 'BMSG-DB', (context.notePrefix || '新規曲') + ': ' + song.title);
-            const rollback = [];
-            try {
-              const songValues = new Array(songsTable.header.length).fill('');
-              songValues[songsTable.map.SongID] = reservation.issuedId;
-              songValues[songsTable.map.Title] = song.title;
-              songValues[songsTable.map.Artist] = song.artist;
-              songValues[songsTable.map.ReleaseDate] = song.releaseDateValue;
-              songValues[songsTable.map.Form] = song.form;
-              songValues[songsTable.map.CDTitle] = song.cdTitle;
-              songValues[songsTable.map.IsTitleTrack] = song.isTitleTrack;
-              rollback.push({sheet:songsSheet,row:appendStyledRow_(songsSheet, songValues)});
-
-              const creditsSheet = requireSheet_(ss, BU1.SHEETS.SONG_CREDITS);
-              const creditsTable = readTable_(creditsSheet);
-              requireColumns_(creditsTable, ['SongID','Title','Lyricists','Composers','Choreographers']);
-              const creditValues = new Array(creditsTable.header.length).fill('');
-              creditValues[creditsTable.map.SongID] = reservation.issuedId;
-              creditValues[creditsTable.map.Title] = song.title;
-              creditValues[creditsTable.map.Lyricists] = credits.lyricists;
-              creditValues[creditsTable.map.Composers] = credits.composers;
-              creditValues[creditsTable.map.Choreographers] = credits.choreographers;
-              rollback.push({sheet:creditsSheet,row:appendStyledRow_(creditsSheet, creditValues)});
-
-              const partsSheet = requireSheet_(ss, BU1.SHEETS.LYRICS_PARTS);
-              const partsTable = readTable_(partsSheet);
-              requireColumns_(partsTable, ['SongID','PartOrder','Singer','Lyrics']);
-              parts.forEach(function(part,index){
-                const singer = clean_(part.singer || (part.mainSingerIds || []).join(','));
-                const lyrics = String(part.lyrics || '').trim();
-                if (!singer || !lyrics) throw new Error('Part ' + (index + 1) + ' のSingerまたは歌詞が空です。');
-                const values = new Array(partsTable.header.length).fill('');
-                values[partsTable.map.SongID] = reservation.issuedId;
-                values[partsTable.map.PartOrder] = index + 1;
-                values[partsTable.map.Singer] = singer;
-                values[partsTable.map.Lyrics] = lyrics;
-                rollback.push({sheet:partsSheet,row:appendStyledRow_(partsSheet, values)});
-              });
-
-              if (song.artist === 'BE:FIRST') syncPerformanceMetricRows(ss, true);
-              SpreadsheetApp.flush();
-              const verifySongs = readTable_(songsSheet).rows.filter(function(r){ return id_(r.values[songsTable.map.SongID]) === reservation.issuedId; });
-              const verifyPartsTable = readTable_(partsSheet);
-              const verifyParts = verifyPartsTable.rows.filter(function(r){ return id_(r.values[verifyPartsTable.map.SongID]) === reservation.issuedId; });
-              if (verifySongs.length !== 1 || verifyParts.length !== parts.length) throw new Error('登録後の照合に失敗しました。');
-              finalizeIdReservation_(reservation, true, '新規曲登録完了: ' + song.title);
-              return {ok:true, songId:reservation.issuedId, title:song.title, artist:song.artist};
-            } catch (e) {
-              rollback.sort(function(a,b){ return b.row-a.row; }).forEach(function(item){
-                try { if (item.row >= 2 && item.row <= item.sheet.getLastRow()) item.sheet.deleteRow(item.row); } catch (ignore) {}
-              });
-              try { finalizeIdReservation_(reservation, false, '新規曲登録失敗: ' + song.title); } catch (ignore) {}
-              throw e;
-            }
-          }
-
-          function replaceSongPartsCore_(ss, songId, incoming) {
-            const songs = readTable_(requireSheet_(ss, BU1.SHEETS.SONGS));
-            if (!songs.rows.some(function(r){ return id_(r.values[songs.map.SongID]) === songId; })) throw new Error('曲が見つかりません。');
-            const singerById = universeServiceSingerById_(ss);
-            const normalized = incoming.map(function(part,index){
-              const lyrics = String(part && part.lyrics || '').trim();
-              if (!lyrics) throw new Error('Part ' + (index + 1) + ' の歌詞が空です。');
-              const singer = Array.isArray(part && part.singers)
-                ? encodeUniverseServiceSingerAssignments_(part.singers, singerById)
-                : validateUniverseServiceSingerString_(String(part && part.singer || ''), singerById);
-              if (!singer) throw new Error('Part ' + (index + 1) + ' のSingerを選択してください。');
-              return {partOrder:index + 1, singer:singer, lyrics:lyrics};
-            });
-            const sheet = requireSheet_(ss, BU1.SHEETS.LYRICS_PARTS);
-            let table = readTable_(sheet);
-            requireColumns_(table, ['SongID','PartOrder','Singer','Lyrics']);
-            const oldRows = table.rows.filter(function(r){ return id_(r.values[table.map.SongID]) === songId; }).map(function(r){ return {rowNumber:r.rowNumber, values:r.values.slice()}; });
-            try {
-              oldRows.slice().sort(function(a,b){return b.rowNumber-a.rowNumber;}).forEach(function(r){sheet.deleteRow(r.rowNumber);});
-              table = readTable_(sheet);
-              normalized.forEach(function(part){
-                const values = new Array(table.header.length).fill('');
-                values[table.map.SongID] = songId;
-                values[table.map.PartOrder] = part.partOrder;
-                values[table.map.Singer] = part.singer;
-                values[table.map.Lyrics] = part.lyrics;
-                appendStyledRow_(sheet, values);
-              });
-              SpreadsheetApp.flush();
-              const verify = readTable_(sheet);
-              const rows = verify.rows.filter(function(r){ return id_(r.values[verify.map.SongID]) === songId; });
-              if (rows.length !== normalized.length) throw new Error('歌詞保存後の照合に失敗しました。');
-              return {ok:true, songId:songId, parts:normalized};
-            } catch (e) {
-              const current = readTable_(sheet);
-              current.rows.filter(function(r){ return id_(r.values[current.map.SongID]) === songId; }).sort(function(a,b){return b.rowNumber-a.rowNumber;}).forEach(function(r){try{sheet.deleteRow(r.rowNumber);}catch(ignore){}});
-              const restoredTable = readTable_(sheet);
-              oldRows.forEach(function(old){
-                const values = old.values.slice(0, restoredTable.header.length);
-                while (values.length < restoredTable.header.length) values.push('');
-                appendStyledRow_(sheet, values);
-              });
-              SpreadsheetApp.flush();
-              throw e;
-            }
-          }
-
-          function getLegacyDirectMastersPlan_() {
-            const ss = openCoreSpreadsheet_();
-            const errors = [];
-            const guests = readTable_(requireSheet_(ss, BU1.SHEETS.GUESTS));
-            requireColumns_(guests, ['GuestID','DisplayName']);
-            const guestRows = guests.rows.filter(function(r){ return !id_(r.values[guests.map.GuestID]) && clean_(r.values[guests.map.DisplayName]); });
-            const songs = readTable_(requireSheet_(ss, BU1.SHEETS.SONGS));
-            requireColumns_(songs, ['SongID','Title','Artist','ReleaseDate','Form','CDTitle','IsTitleTrack']);
-            const songRows = songs.rows.filter(function(r){ return !id_(r.values[songs.map.SongID]) && r.values.some(function(v){return !!clean_(v);}); });
-            const guestNames = {};
-            guestRows.forEach(function(r){
-              const name = clean_(r.values[guests.map.DisplayName]);
-              if (guestNames[name]) errors.push('Guest名が重複しています: ' + name);
-              guestNames[name] = true;
-            });
-            songRows.forEach(function(r){
-              try {
-                if (!clean_(r.values[songs.map.ReleaseDate])) throw new Error('ReleaseDateが必須です');
-                const song = normalizeUniverseServiceSong_({
-                  title:r.values[songs.map.Title], artist:r.values[songs.map.Artist], releaseDate:r.values[songs.map.ReleaseDate],
-                  form:r.values[songs.map.Form], cdTitle:r.values[songs.map.CDTitle], isTitleTrack:r.values[songs.map.IsTitleTrack]
-                });
-                assertUniverseServiceArtist_(ss, song.artist);
-              } catch (e) { errors.push(r.rowNumber + '行目: ' + e.message); }
-            });
-            return {
-              guestCount:guestRows.length,
-              songCount:songRows.length,
-              guestRows:guestRows.map(function(r){return {rowNumber:r.rowNumber,name:clean_(r.values[guests.map.DisplayName])};}),
-              songRows:songRows.map(function(r){return {rowNumber:r.rowNumber};}),
-              errors:errors
-            };
-          }
-
-          function commitLegacyDirectMasters_() {
-            return withSharedWriterLock_('Guest・楽曲同期', function(){
-              const ss = openCoreSpreadsheet_();
-              const plan = getLegacyDirectMastersPlan_();
-              if (plan.errors.length) throw new Error(plan.errors.join('\n'));
-              let guests = 0, songs = 0;
-              plan.guestRows.forEach(function(item){
-                const result = registerGuestCore_(ss, item.name, {source:'BMSG-DB_LEGACY',notePrefix:'Spreadsheet Guest登録',existingRowNumber:item.rowNumber});
-                if (result && !result.alreadyExists) guests++;
-              });
-              plan.songRows.forEach(function(item){
-                assignSongIdToExistingRowCore_(ss, item.rowNumber, {source:'BMSG-DB_LEGACY',notePrefix:'Spreadsheet 楽曲登録'});
-                songs++;
-              });
-              if (songs) syncPerformanceMetricRows(ss, true);
-              return {ok:true, guests:guests, songs:songs};
-            });
-          }
-
-          function assignSongIdToExistingRowCore_(ss, rowNumber, context) {
-            context = context || {};
-            const sheet = requireSheet_(ss, BU1.SHEETS.SONGS);
-            let table = readTable_(sheet);
-            const row = table.rows.find(function(r){ return r.rowNumber === Number(rowNumber); });
-            if (!row || id_(row.values[table.map.SongID])) throw new Error('楽曲入力行が変更されています。もう一度確認してください。');
-            if (!clean_(row.values[table.map.ReleaseDate])) throw new Error(rowNumber + '行目: ReleaseDateが必須です');
-            const song = normalizeUniverseServiceSong_({
-              title:row.values[table.map.Title], artist:row.values[table.map.Artist], releaseDate:row.values[table.map.ReleaseDate],
-              form:row.values[table.map.Form], cdTitle:row.values[table.map.CDTitle], isTitleTrack:row.values[table.map.IsTitleTrack]
-            });
-            assertUniverseServiceArtist_(ss, song.artist);
-            const duplicate = table.rows.find(function(r){
-              return r.rowNumber !== row.rowNumber && clean_(r.values[table.map.Title]) === song.title && clean_(r.values[table.map.Artist]) === song.artist;
-            });
-            if (duplicate) throw new Error('同じTitle＋Artistの行が既にあります: ' + song.title + ' / ' + song.artist);
-            const band = BU1.SONG_BANDS[song.artist] || BU1.SONG_BANDS.DEFAULT;
-            const reservation = reserveNumberForKey_(ss, 'NEXT_SONG_ID_' + band, context.source || 'BMSG-DB_LEGACY', (context.notePrefix || 'Spreadsheet 楽曲登録') + ': ' + song.title);
-            let creditRow = 0;
-            try {
-              sheet.getRange(row.rowNumber, table.map.SongID + 1).setValue(reservation.issuedId);
-              const creditsSheet = requireSheet_(ss, BU1.SHEETS.SONG_CREDITS);
-              const creditsTable = readTable_(creditsSheet);
-              requireColumns_(creditsTable, ['SongID','Title','Lyricists','Composers','Choreographers']);
-              if (!creditsTable.rows.some(function(r){return id_(r.values[creditsTable.map.SongID]) === reservation.issuedId;})) {
-                const values = new Array(creditsTable.header.length).fill('');
-                values[creditsTable.map.SongID] = reservation.issuedId;
-                values[creditsTable.map.Title] = song.title;
-                creditRow = appendStyledRow_(creditsSheet, values);
-              }
-              SpreadsheetApp.flush();
-              table = readTable_(sheet);
-              const verify = table.rows.filter(function(r){return id_(r.values[table.map.SongID]) === reservation.issuedId;});
-              if (verify.length !== 1) throw new Error('楽曲登録後の照合に失敗しました。');
-              finalizeIdReservation_(reservation, true, '楽曲登録完了: ' + song.title);
-              return {ok:true,songId:reservation.issuedId,title:song.title,artist:song.artist};
-            } catch (e) {
-              try {
-                const cell = sheet.getRange(row.rowNumber, table.map.SongID + 1);
-                if (id_(cell.getValue()) === reservation.issuedId) cell.clearContent();
-              } catch (ignore) {}
-              if (creditRow) try { requireSheet_(ss, BU1.SHEETS.SONG_CREDITS).deleteRow(creditRow); } catch (ignore) {}
-              try { finalizeIdReservation_(reservation, false, '楽曲登録失敗: ' + song.title); } catch (ignore) {}
-              throw e;
-            }
-          }
-
-          function commitLegacyLyricsInputForSharedWriter_(payload) {
-            payload = payload || {};
-            const raw = String(payload.raw || '');
-            const metaInput = payload.metaInput || {};
-            if (!clean_(raw)) throw new Error('歌詞欄が空です。');
-            return withSharedWriterLock_('歌詞登録', function(){
-              const ss = openCoreSpreadsheet_();
-              const masters = {groups:loadLyricsGroups_(ss),singers:loadLyricsSingers_(ss),songs:loadLyricsSongs_(ss)};
-              const result = parseLyricsMaterial_(raw, metaInput, masters);
-              if (!result.canRegister) throw new Error((result.errors || ['歌詞を解析できませんでした。']).join('\n'));
-              const incoming = result.parts.map(function(part){
-                return {singers:part.mainSingerIds.map(function(id){return {id:String(id),role:'MAIN'};}),lyrics:part.lyrics};
-              });
-              if (result.song && result.song.songId) {
-                return replaceSongPartsCore_(ss, String(result.song.songId), incoming);
-              }
-              const song = normalizeUniverseServiceSong_({title:result.title,artist:result.group.name,releaseDate:result.releaseDate,form:'',cdTitle:'',isTitleTrack:false});
-              const parsedParts = result.parts.map(function(part,index){return {partOrder:index+1,singer:part.mainSingerIds.join(','),lyrics:part.lyrics};});
-              return createSongWithPartsCore_(ss, song, normalizeUniverseServiceCredits_({}), parsedParts, {source:'BMSG-DB_LEGACY',notePrefix:'Spreadsheet 歌詞登録'});
-            });
-          }
-          '''
-          if 'function registerGuestCore_(' not in text:
-              text = text.rstrip() + '\n' + helpers.strip() + '\n'
-          else:
-              raise SystemExit('shared writer helpers already exist; refusing duplicate append')
-          service.write_text(text)
-
-          masters = Path('Masters.gs')
-          masters.write_text(r'''/** 03_Guests / 06_Songs の直接入力補助。
-           * UI確認だけを担当し、実際のGuest / Song書込はUniverseService.gsの共通Writerへ委譲する。
-           */
-          function confirmAndSyncDirectMasters() {
-            const plan = getLegacyDirectMastersPlan_();
-            if (plan.errors.length) { alert_('登録を中止しました', plan.errors.join('\n')); return; }
-            if (!confirm_('Guest・楽曲の登録確認', '新規Guest: ' + plan.guestCount + '件\n新規楽曲: ' + plan.songCount + '件\n\n登録しますか？')) return;
-            const result = commitLegacyDirectMasters_();
-            alert_('登録完了', 'Guest ' + result.guests + '件・楽曲 ' + result.songs + '件を共通Writerで登録しました。');
-          }
-          ''')
-
-          lyrics = Path('Lyrics.gs')
-          ltext = lyrics.read_text()
-          ltext = replace_function(ltext, 'commitLyricsInput', r'''function commitLyricsInput() {
-            const input = requireSheet_(SpreadsheetApp.getActiveSpreadsheet(), BU1.SHEETS.INPUT_LYRICS);
-            const saved = PropertiesService.getDocumentProperties().getProperty('BU_LYRICS_PREVIEW');
-            if (!saved) { alert_('歌詞登録', '先に「歌詞｜解析（プレビュー）」を実行してください。'); return; }
-            const payload = JSON.parse(saved);
-            const raw = input.getRange(BU_LYRICS.INPUT_CELL).getDisplayValue();
-            const metaInput = readLyricsMetadataInput_(input);
-            if (raw !== payload.raw || JSON.stringify(metaInput) !== JSON.stringify(payload.metaInput || {}) || !payload.result.canRegister) {
-              alert_('歌詞登録', '曲名・Group・発売日・歌詞のいずれかがプレビュー時から変わったか、登録不可の解析結果です。もう一度解析してください。');
-              return;
-            }
-            if (!confirm_('歌詞登録の確認', payload.result.title + '\n' + payload.result.parts.length + 'パートを登録しますか？\n既存曲の場合は歌詞パートを置き換えます。')) return;
-            const result = commitLegacyLyricsInputForSharedWriter_({raw:raw, metaInput:metaInput});
-            input.getRange(BU_LYRICS.STATUS_CELL).setValue('登録済み SongID ' + result.songId);
-            PropertiesService.getDocumentProperties().deleteProperty('BU_LYRICS_PREVIEW');
-            alert_('歌詞登録完了', 'SongID ' + result.songId + ' を登録しました。');
-          }''')
-          lyrics.write_text(ltext)
+          p.write_text(text)
           PY
 
           git config user.name github-actions[bot]
           git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add UniverseService.gs Masters.gs Lyrics.gs
+          git add Lyrics.gs
           git diff --cached --check
-          git commit -m 'Unify legacy spreadsheet writes through shared writer'
+          git commit -m 'Route legacy Guest registration through shared writer'
           git push
