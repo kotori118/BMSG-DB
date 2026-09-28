@@ -9,6 +9,7 @@ BMSG Universe の Core DB 管理・移行用 Apps Script。
 - `00_Config` は廃止対象。ID採番は Log DB の `IDRegistry` を使用する。
 - 一度発行したIDは `RESERVED / COMMITTED / ABORTED` を問わず再利用しない。
 - Song / Lyrics / Guest の書込責務は BMSG-DB の共通Writerへ集約する。
+- Universeの新規楽曲保存は `UniverseService.gs` の `saveNewSongLyricsForUniverse()` を唯一のWriter入口とし、ignoredGuestCandidates も同関数で処理する。Override/Fix専用Runtime層は残さない。
 - BMSG-PJ は BMSG-DB をApps Scriptライブラリとして呼び出し、Song / Lyrics / Guest を直接採番・書込しない。
 - `11_PartTransfers` は完全手動管理。Lyrics編集から自動追従・自動削除・自動採番しない。
 - 画像の通常登録・ImageID発行は BMSG-PJ `SETTINGS > 画像管理` が正規入口。BMSG-DBの画像処理は既存行の修復のみ。
