@@ -17,6 +17,12 @@ jobs:
         with:
           node-version: '22'
 
+      - name: Validate GAS sources
+        run: node scripts/validate-gas-sources.mjs
+
+      - name: Run source contract tests
+        run: node --test tests/source-contract.test.mjs
+
       - name: Install clasp
         run: npm install -g @google/clasp
 
@@ -30,4 +36,20 @@ jobs:
         run: clasp push -f
 
       - name: Create library version
-        run: clasp version "BMSG Universe shared writer $GITHUB_SHA"
+        id: library_version
+        shell: bash
+        run: |
+          output="$(clasp version "BMSG Universe shared writer $GITHUB_SHA")"
+          echo "$output"
+          version="$(echo "$output" | sed -n 's/.*Created version \([0-9][0-9]*\).*/\1/p')"
+          test -n "$version"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+      - name: Publish BMSG-PJ handoff summary
+        shell: bash
+        run: |
+          {
+            echo "## BMSGDB library handoff"
+            echo "- Created library version: ${{ steps.library_version.outputs.version }}"
+            echo "- BMSG-PJ must pin this version in appsscript.json and deploy before the new writer is used."
+          } >> "$GITHUB_STEP_SUMMARY"
