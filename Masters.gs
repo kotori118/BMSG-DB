@@ -2,6 +2,7 @@
  * UI確認だけを担当し、実際のGuest / Song書込はUniverseService.gsの共通Writerへ委譲する。
  */
 function confirmAndSyncDirectMasters() {
+  blockLegacySheetWrite_('旧Guest・楽曲同期');
   const plan = getLegacyDirectMastersPlan_();
   if (plan.errors.length) { alert_('登録を中止しました', plan.errors.join('\n')); return; }
   if (!confirm_('Guest・楽曲の登録確認', '新規Guest: ' + plan.guestCount + '件\n新規楽曲: ' + plan.songCount + '件\n\n登録しますか？')) return;
