@@ -92,3 +92,27 @@ test('DB optimization audit is administrator gated and performs read-only checks
   assert.match(audit,/LEGACY_INPUT/);
   assert.doesNotMatch(audit,/\.setValues\(|\.setValue\(|\.clearContent\(|\.deleteRow\(/);
 });
+
+test('sheet-entry routes can be locked when site-only mode is enabled',()=>{
+  const code=fs.readFileSync(path.join(root,'Code.gs'),'utf8');
+  assert.match(code,/function siteOnlyDbWritesEnabled_\(\)/);
+  assert.match(code,/UNIVERSE_SITE_ONLY_WRITES/);
+  assert.match(code,/function blockLegacySheetWrite_\(operation\)/);
+  const protectedRoutes={
+    'Groups.gs':['confirmAndSyncMemberships'],
+    'Profiles.gs':['confirmAndSyncProfiles','retireSelectedProfileField','restoreRetiredProfileFields'],
+    'Masters.gs':['confirmAndSyncDirectMasters'],
+    'Lyrics.gs':['commitLyricsInput'],
+    'MetricsTransfers.gs':['syncPerformanceMetricRows','deleteSelectedPartTransfer'],
+    'Cards.gs':['syncCardsOnAccess_'],
+    'UniverseService.gs':['commitLegacyDirectMasters_','commitLegacyLyricsInputForSharedWriter_']
+  };
+  for(const [file,names] of Object.entries(protectedRoutes)){
+    const source=fs.readFileSync(path.join(root,file),'utf8');
+    for(const name of names){
+      const location=source.indexOf('function '+name+'(');
+      assert.ok(location>=0,'missing '+file+'.'+name);
+      assert.match(source.slice(location,location+210),/blockLegacySheetWrite_\(/,'unguarded '+file+'.'+name);
+    }
+  }
+});
