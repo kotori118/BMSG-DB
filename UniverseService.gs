@@ -597,6 +597,7 @@ function getLegacyDirectMastersPlan_() {
 
 
 function commitLegacyDirectMasters_() {
+  blockLegacySheetWrite_('旧シート楽曲登録');
   return withSharedWriterLock_('Guest・楽曲同期', function(){
     const ss = openCoreSpreadsheet_();
     const plan = getLegacyDirectMastersPlan_();
@@ -670,6 +671,7 @@ function assignSongIdToExistingRowCore_(ss, rowNumber, context) {
 }
 
 function commitLegacyLyricsInputForSharedWriter_(payload) {
+  blockLegacySheetWrite_('旧シート歌詞登録');
   payload = payload || {};
   const raw = String(payload.raw || '');
   const metaInput = payload.metaInput || {};
