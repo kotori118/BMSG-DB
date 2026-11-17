@@ -141,3 +141,45 @@ test('PartTransfers are retired without touching PerformanceMetrics',()=>{
   assert.match(metrics,/function syncPerformanceMetricRows\(/);
   assert.match(writer,/ensurePerformanceMetricRowForSong_\(ss,reservation\.issuedId\)/);
 });
+
+test('new or changed colors must be unique across groups, units and members',()=>{
+  const catalogSource=fs.readFileSync(path.join(root,'CatalogManagement.gs'),'utf8');
+  assert.match(catalogSource,/function catalogRequireUniqueColor_\(/);
+  assert.match(catalogSource,/function catalogValidateChangedColor_\(/);
+  assert.match(catalogSource,/catalogRequireUniqueColor_\(ss,color,'GROUP',''\)/);
+  assert.match(catalogSource,/catalogRequireUniqueColor_\(ss,color,'MEMBER',''\)/);
+  assert.match(catalogSource,/catalogValidateChangedColor_\(ss,payload\.color\|\|before\.ColorHex/);
+  assert.match(catalogSource,/catalogValidateChangedColor_\(ss,payload\.color\|\|row\.values\[t\.map\.ColorHex\]/);
+  const sandbox={
+    clean_:(v)=>String(v??'').trim(),
+    id_:(v)=>String(v??'').trim(),
+    normalizeHex_:(v)=>{
+      v=String(v??'').trim().toUpperCase();
+      if(v&&!/^#[0-9A-F]{6}$/.test(v))throw new Error('Invalid hex');
+      return v;
+    },
+    BU1:{SHEETS:{GROUPS:'Groups',MEMBERS:'Members'}},
+    catalogTable_:(_ss,name)=>{
+      const rows=name==='Groups'?
+        [['1','MAZZEL','#ff0000'],['6','ShowMinorSavage','#000080']]:
+        [['401','CHIKA','#FF0000'],['101','SOTA','#00AFCC']];
+      const headers=name==='Groups'?['GroupID','GroupName','ColorHex']:['MemberID','DisplayName','ColorHex'];
+      return {map:Object.fromEntries(headers.map((h,i)=>[h,i])),rows:rows.map(v=>({values:v}))};
+    }
+  };
+  vm.createContext(sandbox);
+  const prefix=catalogSource.slice(catalogSource.indexOf('function catalogRequireUniqueColor_('),
+    catalogSource.indexOf('function createCatalogGroupForUniverse('));
+  vm.runInContext(prefix,sandbox);
+  const check=(c,k,id)=>vm.runInContext(
+    'catalogRequireUniqueColor_('+JSON.stringify({})+','+JSON.stringify(c)+','+JSON.stringify(k)+','+JSON.stringify(id)+')',sandbox);
+  assert.equal(check('#00ff00','GROUP',''),'#00FF00');
+  assert.throws(()=>check('#ff0000','GROUP',''),/MAZZEL.*CHIKA/);
+  assert.throws(()=>check('#00afcc','MEMBER',''),/SOTA/);
+  assert.throws(()=>check('#000080','GROUP',''),/ShowMinorSavage/);
+  // Historical collision is allowed when the record does not change color.
+  const unchanged=vm.runInContext("catalogValidateChangedColor_({},'#ff0000','#FF0000','GROUP','1')",sandbox);
+  assert.equal(unchanged,'#FF0000');
+  // New color from legacy duplicate still must be unused.
+  assert.throws(()=>vm.runInContext("catalogValidateChangedColor_({},'#00AFCC','#FF0000','GROUP','1')",sandbox),/SOTA/);
+});
