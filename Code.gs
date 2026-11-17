@@ -35,38 +35,22 @@ const BU_ID_REGISTRY_HEADERS_ = Object.freeze([
   'EntityType','Scope','IssuedID','NumericValue','Status','RequestID','Source','IssuedAt','UpdatedAt','Note'
 ]);
 
-/**
- * Cutover flag, OFF by default. This does not protect direct manual edits to
- * Google Sheets: access controls must be migrated separately.
- */
-function siteOnlyDbWritesEnabled_() {
-  return PropertiesService.getScriptProperties().getProperty('UNIVERSE_SITE_ONLY_WRITES')==='true';
-}
+/** Spreadsheet entry is permanently retired; old properties cannot re-enable it. */
+function siteOnlyDbWritesEnabled_() { return true; }
 function blockLegacySheetWrite_(operation) {
   if(siteOnlyDbWritesEnabled_())
     throw new Error((operation||'旧シート操作')+'は廃止されました。Universeサイトの管理画面から操作してください。');
 }
 function onOpen() {
-  const menu=SpreadsheetApp.getUi().createMenu('BMSG Universe');
-  if(!siteOnlyDbWritesEnabled_()) {
-    menu.addItem('プロフィール｜変更を確認・反映','confirmAndSyncProfiles')
-      .addSeparator()
-      .addItem('所属・グループ｜変更を確認・反映','confirmAndSyncMemberships')
-      .addItem('Guest・楽曲｜新規登録を確認','confirmAndSyncDirectMasters')
-      .addSeparator()
-      .addItem('歌詞｜解析（プレビュー）','previewLyricsInput')
-      .addItem('歌詞｜解析結果を登録','commitLyricsInput')
-      .addSeparator();
-    try { ensureLyricsInputLayout_(); } catch(err) { console.error(err); }
-  }
-  menu.addItem('全体｜構成を検証','validateUniverseStructure').addToUi();
+  SpreadsheetApp.getUi().createMenu('BMSG Universe')
+    .addItem('全体｜構成を検証','validateUniverseStructure').addToUi();
 }
 
 function onInstall(e) { onOpen(e); }
 
 function validateUniverseStructure() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const required = Object.keys(BU1.SHEETS).filter(k => !siteOnlyDbWritesEnabled_() || (k !== 'GUIDE' && !/^INPUT_/.test(k))).map(k => BU1.SHEETS[k]);
+  const required = Object.keys(BU1.SHEETS).filter(k => k !== 'GUIDE' && !/^INPUT_/.test(k)).map(k => BU1.SHEETS[k]);
   const errors = required.filter(name => !ss.getSheetByName(name))
     .map(name => '不足シート: ' + name);
   errors.push.apply(errors, validateRequiredHeaders_(ss));

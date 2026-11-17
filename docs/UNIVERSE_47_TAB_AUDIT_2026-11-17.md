@@ -61,3 +61,16 @@ Baseline = Core 25 / Log 22. **Current Core=23**, after deleting 13_VideoSegment
 Compare every existing legacy spreadsheet write operation against site actions: group/member/unit CRUD, membership add/remove/reorder, profile field create/retire/restore, song/credits/lyrics editing, guest and image management, safe song delete, and audit/permissions. Prioritize the smallest missing operations first.
 
 **No merge, no GAS schema migration, and no site deployment.** The only Core edits on 2026-11-17 were explicitly authorized deletions of 13_VideoSegments and 12_Videos after backups.
+
+
+## 2026-11-17 再監査・削除準備（公開版28／library16以降）
+
+利用者の「検査後に不要シートを全て削除」「非表示の削除対象も削除」指示に基づく。検査時Core23／Log23。現行schemaとCATALOG_Audit作成済みを確認し、利用者自身による初期整備・実操作の履歴がある。前段の開発版／未移行表記は過去の経緯として扱う。
+
+削除候補13：Coreの00_管理ガイド・入力_歌詞・入力_プロフィール・入力_所属・11_PartTransfers・削除予定_06_MemberProfileValues_NEW・削除予定_05_ProfileFields_NEW・削除予定_確認_プロフィール差分・削除予定_05_MemberProfiles・削除予定_移行_要確認・削除予定_確認_カード同期・削除予定_06_MemberTags、およびLog Topics。正本01〜10、移行_旧ID対応、Users／ProfileSettings／IDRegistry／CATALOG_Audit／ゲーム・利用履歴は保持する。
+
+照合：旧プロフィール値293件、旧基本情報198項目、旧タグ92件は現行05_Profilesに包含。旧DATE文字列とSheets日付serialの32件は日付を正規化して一致。旧入力プロフィール286項目も同様に一致し、未知メンバー・名前／色の差分なし。旧歌詞入力に曲名・アーティスト・発売日・本文なし。旧所属入力61リンクのうち2リンクは現行正本と異なる古い内容で、正本へ復活させずバックアップに保存。グループ名・色は一致。旧プロフィール差分の実データ・チェック済み行0、旧移行要確認とTopicsはheaderのみ。旧カード同期確認も説明とheaderのみ。
+
+Core／Log全46シートの51矩形をuserEnteredValue.formulaValue・errorValue・validation限定で検査（13batch）。数式1件、エラー0、削除候補へのformula／validation参照0。両repoの本番コードで削除予定7／11／Topicsを読む直接参照なし（監査分類文字列は除外）。旧入力だけlegacyメニュー・validator／自動レイアウトに依存が残るため、先に旧入力モードを永久停止し旧設定UI／Writerを撤去する。
+
+削除前に指定バックアップフォルダへCore／Log全体の新規コピーを作成し、ファイルIDが本番と異なること・全タブ保持を確認する。既存バックアップを変更しない。コード反映・backup確認・直前再読込の後にdeleteSheetだけを実行し、保持対象sheetId・正本と履歴・エラーを再確認する。実施成否と新backup IDsはDrive正本／PRの最終記録で確認する。

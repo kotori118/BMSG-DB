@@ -86,10 +86,10 @@ test('DB optimization audit validates a Universe user and performs read-only che
   assert.doesNotMatch(audit,/\.setValues\(|\.setValue\(|\.clearContent\(|\.deleteRow\(/);
 });
 
-test('sheet-entry routes can be locked when site-only mode is enabled',()=>{
+test('retired sheet-entry routes are always blocked',()=>{
   const code=fs.readFileSync(path.join(root,'Code.gs'),'utf8');
   assert.match(code,/function siteOnlyDbWritesEnabled_\(\)/);
-  assert.match(code,/UNIVERSE_SITE_ONLY_WRITES/);
+  assert.match(code,/function siteOnlyDbWritesEnabled_\(\) \{ return true; \}/);
   assert.match(code,/function blockLegacySheetWrite_\(operation\)/);
   const protectedRoutes={
     'Groups.gs':['confirmAndSyncMemberships'],

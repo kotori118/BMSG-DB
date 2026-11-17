@@ -79,12 +79,9 @@ test('site-only cutover does not require 入力_歌詞 or 入力_プロフィー
   assert.deepEqual(s.menuNames,['全体｜構成を検証']);
   assert.throws(s.block,/廃止されました/);
 });
-test('without cutover old inputs remain required; switching flag does not delete them',()=>{
+test('old false flag cannot re-enable legacy writes or require deleted input sheets',()=>{
   const s=make(false);
-  const status=s.validate();
-  assert.equal(status.ok,false);
-  assert.ok(status.errors.some(x=>x.includes('入力_歌詞')));
-  assert.ok(status.errors.some(x=>x.includes('入力_プロフィール')));
-  // Legacy input layout initialization is invoked only when old mode is ON.
-  assert.doesNotThrow(s.block);
+  assert.equal(s.validate().ok,true);
+  assert.throws(s.block,/廃止されました/);
+  s.open();assert.deepEqual(s.menuNames,['全体｜構成を検証']);
 });

@@ -146,13 +146,7 @@ test('restore refuses to orphan an image acquired after the backup',()=>{
   assert.throws(()=>x.call('restoreCatalogMasterDataForUniverse',{preview:true,backupId:'backupCore0'}),/履歴参照/);
   assert.equal(x.writes.length,0);
 });
-test('runtime options accept only explicit flags and roll back on audit failure',()=>{
-  const x=fixture();assert.throws(()=>x.call('configureCatalogRuntimeForUniverse',{confirm:'CONFIGURE_MANAGEMENT',flags:{UNIVERSE_CATALOG_ADMIN_EMAILS:true}}),/設定/);
-  x.call('configureCatalogRuntimeForUniverse',{confirm:'CONFIGURE_MANAGEMENT',flags:{UNIVERSE_SITE_ONLY_WRITES:true}});
-  assert.equal(x.props.UNIVERSE_SITE_ONLY_WRITES,'true');x.failAudit();
-  assert.throws(()=>x.call('configureCatalogRuntimeForUniverse',{confirm:'CONFIGURE_MANAGEMENT',flags:{UNIVERSE_SITE_ONLY_WRITES:false}}),/audit/);
-  assert.equal(x.props.UNIVERSE_SITE_ONLY_WRITES,'true');
-});
+
 test('member reorder updates both master and primary-group order while preserving other groups',()=>{
   const x=fixture();x.tables.Members.push(['102','1','SHUNTO','#998877',3,'ACTIVE']);x.tables.Links.push(['1','102',2]);
   x.call('moveCatalogMemberDisplayOrderForUniverse',{memberId:'101',direction:'DOWN'});
