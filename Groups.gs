@@ -52,7 +52,7 @@ function buildMembershipPlan_(ss) {
 
 function applyMembershipPlan_(ss, plan) {
   const input = requireSheet_(ss, BU1.SHEETS.INPUT_MEMBERSHIP);
-  plan.newGroups.forEach(g => { g.groupId = String(issueNumber_(ss, 'NEXT_GROUP_ID')); input.getRange(4, g.col).setValue(g.groupId); });
+  plan.newGroups.forEach(g => { g.groupId = String(issueNumber_(ss, 'NEXT_GROUP_ID_GROUP')); input.getRange(4, g.col).setValue(g.groupId); });
   const groupsSheet = requireSheet_(ss, BU1.SHEETS.GROUPS);
   const gmSheet = requireSheet_(ss, BU1.SHEETS.GROUP_MEMBERS);
   clearDataRows_(groupsSheet, 2, 4); clearDataRows_(gmSheet, 2, 3);

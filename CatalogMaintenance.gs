@@ -33,6 +33,8 @@ function catalogCommitCells_(edits,kind,id,action,before,after,actor){
 function catalogMaintenanceReferences_(ss,kind,id,skip){
   const key={GROUP:'GroupID',GUEST:'GuestID',IMAGE:'ImageID',MEMBER:'MemberID',SONG:'SongID'}[kind];
   const blockers=[];
+  const legacyId = /^(?:G|U|M)\d+$/.test(String(id)) ? String(id).slice(1) : String(id);
+  function matchesRef_(v){ const text=id_(v); return text===id || text===legacyId; }
   [ss,SpreadsheetApp.openById(BU1.LOG_DB_ID)].forEach(function(book){
     book.getSheets().forEach(function(sheet){
       if(['IDRegistry','CATALOG_Audit'].indexOf(sheet.getName())>=0)return;
@@ -40,17 +42,17 @@ function catalogMaintenanceReferences_(ss,kind,id,skip){
       t.rows.forEach(function(row){
         if(skip&&skip(t,row,book))return;
         const v=row.values,m=t.map;
-        let found=key&&m[key]!=null&&id_(v[m[key]])===id;
-        if(kind==='IMAGE'&&m.ActivityType!=null&&m.TargetID!=null&&String(v[m.ActivityType])==='DRAW_CARD'&&id_(v[m.TargetID])===id)found=true;
+        let found=key&&m[key]!=null&&matchesRef_(v[m[key]]);
+        if(kind==='IMAGE'&&m.ActivityType!=null&&m.TargetID!=null&&String(v[m.ActivityType])==='DRAW_CARD'&&matchesRef_(v[m.TargetID]))found=true;
         if(kind==='SONG') ['SourceSongID','OriginalSongID','TargetSongID'].forEach(function(k){if(m[k]!=null&&id_(v[m[k]])===id)found=true;});
         if(kind==='GUEST')Object.keys(m).filter(function(k){return /Singer|GuestID/.test(k);}).forEach(function(k){if(String(v[m[k]]||'').split(/[^0-9A-Za-z]+/).indexOf(id)>=0)found=true;});
-        if(kind==='GROUP'&&m.CoverGroupID!=null&&id_(v[m.CoverGroupID])===id)found=true;
+        if(kind==='GROUP'&&m.CoverGroupID!=null&&matchesRef_(v[m.CoverGroupID]))found=true;
         if(kind==='GUEST'&&m.Singer!=null){found=found||String(v[m.Singer]||'').split(',').some(function(token){return token.trim().replace(/_(up|down|sub)$/i,'')===id;});}
-        if(m.TargetID!=null&&m.TargetType!=null&&String(v[m.TargetType]||'').toUpperCase()===kind&&id_(v[m.TargetID])===id)found=true;
+        if(m.TargetID!=null&&m.TargetType!=null&&String(v[m.TargetType]||'').toUpperCase()===kind&&matchesRef_(v[m.TargetID]))found=true;
         // Saved JSON snapshots and favorites can also contain an entity reference.
         Object.keys(m).filter(function(k){return /JSON$/.test(k);}).forEach(function(k){
           let data;try{data=JSON.parse(String(v[m[k]]||'null'));}catch(e){if(String(v[m[k]]||'').indexOf(id)>=0)found=true;return;}
-          function walk(x,hint){if(x==null)return;if(typeof x!=='object'){if(String(hint||'').toLowerCase().indexOf((key||'__NONE__').toLowerCase())>=0&&String(x)===id)found=true;return;}Object.keys(x).forEach(function(p){const value=x[p],name=/^\d+$/.test(p)?hint:p;if((p.toLowerCase()===(key||'').toLowerCase()||(kind==='GUEST'&&/^(id|singerId)$/i.test(p)))&&String(value)===id)found=true;walk(value,name);});}walk(data,k);
+          function walk(x,hint){if(x==null)return;if(typeof x!=='object'){if(String(hint||'').toLowerCase().indexOf((key||'__NONE__').toLowerCase())>=0&&matchesRef_(x))found=true;return;}Object.keys(x).forEach(function(p){const value=x[p],name=/^\d+$/.test(p)?hint:p;if((p.toLowerCase()===(key||'').toLowerCase()||(kind==='GUEST'&&/^(id|singerId)$/i.test(p)))&&matchesRef_(value))found=true;walk(value,name);});}walk(data,k);
         });
         if(found)count++;
       });
@@ -62,7 +64,7 @@ function getCatalogMaintenanceBootstrapForUniverse(payload){
   catalogRequireUser_(payload);const ss=openCoreSpreadsheet_(),schema=catalogSchemaStatus_(ss);
   function rows(name,key){const t=catalogTable_(ss,name,[key]);return t.rows.filter(function(r){return id_(r.values[t.map[key]]);}).map(function(r){return Object.assign(catalogRec_(t,r),{revision:catalogRowRevision_(t,r)});});}
   let fields=[];if(schema.ready)fields=pfMgmtBootstrapRows_(pfMgmtRequireShape_(ss));
-  return {ok:true,schema:schema,groups:rows(BU1.SHEETS.GROUPS,'GroupID'),guests:rows(BU1.SHEETS.GUESTS,'GuestID'),members:rows(BU1.SHEETS.MEMBERS,'MemberID'),images:rows(BU1.SHEETS.CARDS,'ImageID').filter(function(r){return String(r.TargetType).toLowerCase()==='member';}),fields:fields,backups:catalogBackupHistory_()};
+  return {ok:true,schema:schema,groups:rows(BU1.SHEETS.GROUPS,'GroupID'),guests:rows(BU1.SHEETS.GUESTS,'GuestID'),members:rows(BU1.SHEETS.MEMBERS,'MemberID'),images:rows(BU1.SHEETS.CARDS,'ImageID'),fields:fields,backups:catalogBackupHistory_()};
 }
 function maintainCatalogGuestForUniverse(payload){
   const actor=catalogRequireUser_(payload),id=id_(payload.guestId);
@@ -104,7 +106,7 @@ function updateCatalogProfileFieldForUniverse(payload){
 function maintainCatalogGroupForUniverse(payload){
   const actor=catalogRequireUser_(payload),id=id_(payload.groupId);
   return withSharedWriterLock_('グループ管理',function(){
-    const ss=openCoreSpreadsheet_();catalogRequireReady_(ss);const t=catalogTable_(ss,BU1.SHEETS.GROUPS,['GroupID','GroupName','GroupKind','DisplayOrder','ColorHex']),row=catalogRow_(t,'GroupID',id),before=catalogRec_(t,row);
+    const ss=openCoreSpreadsheet_();catalogRequireReady_(ss);const t=catalogTable_(ss,BU1.SHEETS.GROUPS,['GroupID','GroupName','DisplayOrder','ColorHex']),row=catalogRow_(t,'GroupID',id),before=catalogRec_(t,row);
     catalogExpectRevision_(t,row,payload.expectedRevision);
     if(payload.action==='DELETE'){
       if(payload.confirm!==id)throw new Error('GroupIDの確認が必要です。');pfMgmtBackupGate_();
@@ -113,12 +115,12 @@ function maintainCatalogGroupForUniverse(payload){
       if(blockers.length)throw new Error('参照が残っています: '+blockers.join(' / '));
       return catalogCommitCells_(catalogClearRowCells_(t,row),'GROUP',id,'DELETE',before,null,actor);
     }
-    const name=catalogRequiredString_(payload.name,'名前',100),kind=String(payload.kind||''),order=Number(payload.displayOrder);
-    if(['GROUP','UNIT'].indexOf(kind)<0||!Number.isSafeInteger(order)||order<1)throw new Error('種別・表示順を確認してください。');
+    const name=catalogRequiredString_(payload.name,'名前',100),kind=id.startsWith('G')?'GROUP':id.startsWith('U')?'UNIT':'INVALID',order=Number(payload.displayOrder);
+    if(['GROUP','UNIT'].indexOf(kind)<0||(payload.kind&&String(payload.kind)!==kind)||!Number.isSafeInteger(order)||order<1)throw new Error('種別・表示順を確認してください。');
     if(t.rows.some(function(r){return r.rowNumber!==row.rowNumber&&clean_(r.values[t.map.GroupName]).toLowerCase()===name.toLowerCase();}))throw new Error('同名グループがあります。');
     const members=catalogTable_(ss,BU1.SHEETS.MEMBERS,['GroupID']);
     if(kind==='UNIT'&&members.rows.some(function(r){return id_(r.values[members.map.GroupID])===id;}))throw new Error('主所属メンバーがいます。先に主所属を変更してください。');
-    const changes={GroupName:name,GroupKind:kind,DisplayOrder:order,ColorHex:catalogValidateChangedColor_(ss,payload.color,before.ColorHex,'GROUP',id)};
+    const changes={GroupName:name,DisplayOrder:order,ColorHex:catalogValidateChangedColor_(ss,payload.color,before.ColorHex,'GROUP',id)};
     const edits=catalogEditCells_(t,row,changes);
     // Group IDs remain unchanged; Artist names in existing songs follow the renamed group.
     const songs=catalogTable_(ss,BU1.SHEETS.SONGS,['Artist']);songs.rows.filter(function(r){return clean_(r.values[songs.map.Artist])===before.GroupName;}).forEach(function(r){edits.push.apply(edits,catalogEditCells_(songs,r,{Artist:name}));});
@@ -134,7 +136,7 @@ function correctCatalogSongArtistForUniverse(payload){
   const actor=catalogRequireUser_(payload),id=id_(payload.songId),artist=catalogRequiredString_(payload.artist,'アーティスト',120);
   return withSharedWriterLock_('楽曲Artistの訂正',function(){
     const ss=openCoreSpreadsheet_();catalogRequireReady_(ss);assertUniverseServiceArtist_(ss,artist);
-    const t=catalogTable_(ss,BU1.SHEETS.SONGS,['SongID','Artist','SongType','SoloMemberID']),row=catalogRow_(t,'SongID',id),before=catalogRec_(t,row);
+    const t=catalogTable_(ss,BU1.SHEETS.SONGS,['SongID','Artist','ArtistRef','SongType','SoloMemberID']),row=catalogRow_(t,'SongID',id),before=catalogRec_(t,row);
     if(payload.expectedArtist!==before.Artist||payload.confirm!==id)throw new Error('変更前Artistと確認が一致しません。');
     if(artist===before.Artist)return {ok:true,unchanged:true};
     // Crossing the BE:FIRST-only analysis boundary requires empty dependent records.
@@ -152,36 +154,68 @@ function correctCatalogSongArtistForUniverse(payload){
         }
         const metric=ensurePerformanceMetricRowForSong_(ss,id);if(metric.created)appended.push(metric);
       }
-      return catalogCommitCells_(catalogEditCells_(t,row,{Artist:artist,SongType:'NORMAL',SoloMemberID:''}),'SONG',id,'CORRECT_ARTIST',before,{Artist:artist},actor);
+      return catalogCommitCells_(catalogEditCells_(t,row,{Artist:artist,ArtistRef:universeServiceArtistRef_(ss,artist),SongType:'NORMAL',SoloMemberID:''}),'SONG',id,'CORRECT_ARTIST',before,{Artist:artist},actor);
     }catch(error){appended.reverse().forEach(function(r){try{r.sheet.deleteRow(r.row);}catch(rollback){throw new Error(error.message+'／追加行の復旧失敗: '+rollback.message);}});throw error;}
   });
 }
 function maintainCatalogImageForUniverse(payload){
   const actor=catalogRequireUser_(payload),id=id_(payload.imageId);
   return withSharedWriterLock_('メンバー画像の表示設定',function(){
-    const ss=openCoreSpreadsheet_();catalogRequireReady_(ss);const t=catalogTable_(ss,BU1.SHEETS.CARDS,['ImageID','TargetType','TargetID','IsProfileMain','DisplayOrder']),row=catalogRow_(t,'ImageID',id),before=catalogRec_(t,row);
-    if(String(before.TargetType).toLowerCase()!=='member')throw new Error('メンバー画像のみ管理できます。');catalogExpectRevision_(t,row,payload.expectedRevision);
+    const ss=openCoreSpreadsheet_();catalogRequireReady_(ss);const t=catalogTable_(ss,BU1.SHEETS.CARDS,['ImageID','MemberID','IsProfileMain']),row=catalogRow_(t,'ImageID',id),before=catalogRec_(t,row);
+    catalogExpectRevision_(t,row,payload.expectedRevision);
     let edits=[];
     if(payload.action==='DELETE'){
       if(payload.confirm!==id)throw new Error('ImageIDの確認が必要です。');pfMgmtBackupGate_();
       const blockers=catalogMaintenanceReferences_(ss,'IMAGE',id,function(tab,r,book){return book===ss&&tab.sheet.getName()===t.sheet.getName()&&r.rowNumber===row.rowNumber;});
       if(blockers.length)throw new Error('取得履歴等に参照があります: '+blockers.join(' / '));edits=catalogClearRowCells_(t,row);
     }else{
-      const order=Number(payload.displayOrder);if(!Number.isSafeInteger(order)||order<1)throw new Error('表示順は1以上の整数です。');
       if(typeof payload.isProfileMain!=='boolean')throw new Error('メイン画像設定を確認してください。');
-      edits=catalogEditCells_(t,row,{DisplayOrder:order,IsProfileMain:payload.isProfileMain});
-      if(payload.isProfileMain)t.rows.filter(function(r){return r.rowNumber!==row.rowNumber&&String(r.values[t.map.TargetType]).toLowerCase()==='member'&&id_(r.values[t.map.TargetID])===String(before.TargetID);}).forEach(function(r){edits.push.apply(edits,catalogEditCells_(t,r,{IsProfileMain:false}));});
+      edits=catalogEditCells_(t,row,{IsProfileMain:payload.isProfileMain});
+      if(payload.isProfileMain)t.rows.filter(function(r){return r.rowNumber!==row.rowNumber&&id_(r.values[t.map.MemberID])===String(before.MemberID);}).forEach(function(r){edits.push.apply(edits,catalogEditCells_(t,r,{IsProfileMain:false}));});
     }
-    return catalogCommitCells_(edits,'IMAGE',id,payload.action==='DELETE'?'DELETE':'DISPLAY',before,payload.action==='DELETE'?null:{displayOrder:payload.displayOrder,isProfileMain:payload.isProfileMain},actor);
+    return catalogCommitCells_(edits,'IMAGE',id,payload.action==='DELETE'?'DELETE':'DISPLAY',before,payload.action==='DELETE'?null:{isProfileMain:payload.isProfileMain},actor);
   });
 }
+
+function catalogLegacyRefMap_(){
+  const ss=openCoreSpreadsheet_(),groups=readTable_(requireSheet_(ss,BU1.SHEETS.GROUPS)),members=readTable_(requireSheet_(ss,BU1.SHEETS.MEMBERS));
+  const group={},member={};
+  groups.rows.forEach(function(r){const id=id_(r.values[groups.map.GroupID]);if(/^[GU]\d+$/.test(id))group[id.slice(1)]=id;});
+  members.rows.forEach(function(r){const id=id_(r.values[members.map.MemberID]);if(/^M\d+$/.test(id))member[id.slice(1)]=id;});
+  return {group,member};
+}
+function catalogAdaptAuditHistory_(row,refs){
+  const result=Object.assign({},row),kind=String(row.EntityType||'').toUpperCase();
+  const entity=String(result.EntityID||'');
+  if(kind==='GROUP'&&refs.group[entity])result.EntityID=refs.group[entity];
+  if(kind==='MEMBER'&&refs.member[entity])result.EntityID=refs.member[entity];
+  const groupKeys={GroupID:true,groupId:true,primaryGroupId:true,CoverGroupID:true,coverGroupId:true};
+  const memberKeys={MemberID:true,memberId:true,soloMemberId:true,SoloMemberID:true};
+  function transform(value,key){
+    if(Array.isArray(value))return value.map(function(v){return transform(v,key);});
+    if(value&&typeof value==='object'){const result={};Object.keys(value).forEach(function(k){result[k]=transform(value[k],k);});return result;}
+    const raw=String(value==null?'':value);
+    if(groupKeys[key]&&refs.group[raw])return refs.group[raw];
+    if(memberKeys[key]&&refs.member[raw])return refs.member[raw];
+    return value;
+  }
+  ['BeforeJSON','AfterJSON'].forEach(function(key){
+    const raw=String(result[key]||'');
+    if(!raw)return;
+    try{result[key]=JSON.stringify(transform(JSON.parse(raw),''));}catch(ignore){}
+  });
+  return result;
+}
+
 function getCatalogAuditHistoryForUniverse(payload){
   catalogRequireUser_(payload);const sheet=SpreadsheetApp.openById(BU1.LOG_DB_ID).getSheetByName('CATALOG_Audit');
   if(!sheet)return {ok:true,rows:[],nextOffset:null};const offset=Math.max(0,Number(payload.offset)||0),last=sheet.getLastRow()-offset;
   const start=Math.max(2,last-49);if(last<2)return {ok:true,rows:[],nextOffset:null};
   const header=sheet.getRange(1,1,1,sheet.getLastColumn()).getDisplayValues()[0];
   const rows=sheet.getRange(start,1,last-start+1,header.length).getDisplayValues().reverse().map(function(v){const r={};header.forEach(function(h,i){r[h]=v[i];});return r;});
-  return {ok:true,rows:rows,nextOffset:start>2?offset+rows.length:null};
+  // Convert only typed historical references in the API response. Stored audit JSON is immutable.
+  const refs=catalogLegacyRefMap_();
+  return {ok:true,rows:rows.map(function(row){return catalogAdaptAuditHistory_(row,refs);}),nextOffset:start>2?offset+rows.length:null};
 }
 function catalogBackupHistory_(){
   try{return JSON.parse(PropertiesService.getScriptProperties().getProperty('UNIVERSE_CATALOG_BACKUP_HISTORY')||'[]');}catch(e){throw new Error('バックアップ履歴が不正です。');}
@@ -201,14 +235,8 @@ function createCatalogBackupsForUniverse(payload){
 }
 /** Retire application logo records; source Drive files are not library-owned assets. */
 function retireCatalogLogosForUniverse(payload){
-  const actor=catalogRequireUser_(payload);
-  if(payload.confirm!=='RETIRE_LOGOS')throw new Error('廃止ロゴの整理確認が必要です。');pfMgmtBackupGate_();
-  return withSharedWriterLock_('廃止ロゴの整理',function(){
-    const ss=openCoreSpreadsheet_(),t=catalogTable_(ss,BU1.SHEETS.CARDS,['ImageID','TargetType']);
-    const rows=t.rows.filter(function(r){return ['group','brand'].indexOf(String(r.values[t.map.TargetType]).toLowerCase())>=0;});
-    const edits=[];rows.forEach(function(r){edits.push.apply(edits,catalogClearRowCells_(t,r));});
-    const result=catalogCommitCells_(edits,'LOGOS','RETIRED','RETIRE',rows.map(function(r){return catalogRec_(t,r);}),null,actor);result.retired=rows.length;return result;
-  });
+  catalogRequireUser_(payload);
+  return {ok:true,retired:0,skipped:true}; // No group/brand image types exist in the five-column schema.
 }
 function prepareCatalogManagementForUniverse(payload){
   catalogRequireUser_(payload);if(payload.confirm!=='PREPARE_MANAGEMENT')throw new Error('初期整備の確認が必要です。');
@@ -272,7 +300,7 @@ function catalogRestorePlan_(entry){
   target.forEach(function(t,i){
     if(JSON.stringify(t.values[0])!==JSON.stringify(current[i].values[0]))throw new Error(t.name+'の列構成が異なります。このバックアップは現在の構造へ直接復元できません。');
     // Retired logos must not return when restoring an older application snapshot.
-    if(t.name===BU1.SHEETS.CARDS){const type=t.values[0].indexOf('TargetType');for(let r=1;r<t.values.length;r++)if(['group','brand'].indexOf(String(t.values[r][type]).toLowerCase())>=0){t.values[r]=t.values[r].map(function(){return '';});t.formulas[r]=t.formulas[r].map(function(){return '';});}while(t.values.length>1&&t.values[t.values.length-1].every(function(v){return v===''||v==null;})&&t.formulas[t.formulas.length-1].every(function(v){return !v;})){t.values.pop();t.formulas.pop();}}
+
   });
   catalogValidateRestoreSnapshot_(target);
   const identityKeys={};identityKeys[BU1.SHEETS.GROUPS]=['GroupID','GROUP'];identityKeys[BU1.SHEETS.MEMBERS]=['MemberID','MEMBER'];identityKeys[BU1.SHEETS.GUESTS]=['GuestID','GUEST'];identityKeys[BU1.SHEETS.SONGS]=['SongID','SONG'];identityKeys[BU1.SHEETS.CARDS]=['ImageID','IMAGE'];
@@ -289,7 +317,7 @@ function catalogValidateRestoreSnapshot_(snapshot){
   function refs(name,key,known){const t=byName[name],col=t.values[0].indexOf(key);if(col<0)return;t.values.slice(1).forEach(function(r){const id=id_(r[col]);if(id&&!known.has(id))throw new Error(name+'の参照不整合: '+key+' '+id);});}
   refs(BU1.SHEETS.MEMBERS,'GroupID',groups);refs(BU1.SHEETS.GROUP_MEMBERS,'GroupID',groups);refs(BU1.SHEETS.GROUP_MEMBERS,'MemberID',members);refs(BU1.SHEETS.PROFILES,'MemberID',members);
   [BU1.SHEETS.SONG_CREDITS,BU1.SHEETS.LYRICS_PARTS,BU1.SHEETS.METRICS].forEach(function(n){refs(n,'SongID',songs);});
-  const images=byName[BU1.SHEETS.CARDS],h=images.values[0];images.values.slice(1).forEach(function(r){if(String(r[h.indexOf('TargetType')]).toLowerCase()==='member'&&!members.has(id_(r[h.indexOf('TargetID')])))throw new Error('画像のメンバー参照が不正です。');});
+  const images=byName[BU1.SHEETS.CARDS],h=images.values[0];images.values.slice(1).forEach(function(r){if(id_(r[h.indexOf('ImageID')])&&!members.has(id_(r[h.indexOf('MemberID')])))throw new Error('画像のメンバー参照が不正です。');});
   // Histories are retained, so a snapshot may not silently undo their current group labels.
   const groupTable=byName[BU1.SHEETS.GROUPS],nameCol=groupTable.values[0].indexOf('GroupName'),names=new Set(groupTable.values.slice(1).map(function(r){return String(r[nameCol]||'').toUpperCase();}));
   const current=catalogTable_(openCoreSpreadsheet_(),BU1.SHEETS.GROUPS,['GroupName']),currentNames=new Set(current.rows.map(function(r){return String(r.values[current.map.GroupName]).toUpperCase();}));

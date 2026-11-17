@@ -9,11 +9,11 @@ const src=fs.readFileSync(path.join(root,'CatalogMemberMaintenance.gs'),'utf8');
 function sandbox(){
   const data={
     Members:[['MemberID','GroupID','DisplayName','DisplayOrder','RecordStatus'],
-      ['101','1','SOTA',1,'ACTIVE'],['102','1','SHUNTO',2,'ACTIVE'],['201','2','KAIRYU',3,'ACTIVE']],
-    Groups:[['GroupID','GroupName','GroupKind','RecordStatus'],
-      ['1','BE:FIRST','GROUP','ACTIVE'],['2','MAZZEL','GROUP','ACTIVE'],['6','ShowMinorSavage','UNIT','ACTIVE']],
+      ['M101','G1','SOTA',1,'ACTIVE'],['M102','G1','SHUNTO',2,'ACTIVE'],['M201','G2','KAIRYU',3,'ACTIVE']],
+    Groups:[['GroupID','GroupName','RecordStatus'],
+      ['G1','BE:FIRST','ACTIVE'],['G2','MAZZEL','ACTIVE'],['U6','ShowMinorSavage','ACTIVE']],
     Links:[['GroupID','MemberID','DisplayOrder'],
-      ['1','101',1],['1','102',2],['2','201',1],['6','101',1]]
+      ['G1','M101',1],['G1','M102',2],['G2','M201',1],['U6','M101',1]]
   };
   const fakeSheet=(name)=>({
     getName:()=>name,
@@ -72,23 +72,23 @@ test('member maintenance requires a Universe user and preserves delete safeguard
 });
 test('same-group order changes only two DisplayOrder cells',()=>{
   const s=sandbox();
-  const result=s.invoke('moveCatalogMemberDisplayOrderForUniverse',{memberId:'102',direction:'UP'});
+  const result=s.invoke('moveCatalogMemberDisplayOrderForUniverse',{memberId:'M102',direction:'UP'});
   assert.equal(result.ok,true);
   assert.equal(s.data.Members[1][3],2);
   assert.equal(s.data.Members[2][3],1);
   assert.equal(s.data.Members[3][3],3);
-  assert.deepEqual(s.data.Links[4],['6','101',1]);
+  assert.deepEqual(s.data.Links[4],['U6','M101',1]);
   assert.equal(s.audits.at(-1)[2],'REORDER');
 });
 test('primary group changes only target member and owned home membership',()=>{
   const s=sandbox();
-  const result=s.invoke('changeCatalogMemberPrimaryGroupForUniverse',{memberId:'102',primaryGroupId:'2'});
+  const result=s.invoke('changeCatalogMemberPrimaryGroupForUniverse',{memberId:'M102',primaryGroupId:'G2'});
   assert.equal(result.ok,true);
-  assert.equal(s.data.Members[2][1],'2');
-  assert.equal(s.data.Members[1][1],'1');
-  assert.equal(s.data.Links[2][0],'2');
+  assert.equal(s.data.Members[2][1],'G2');
+  assert.equal(s.data.Members[1][1],'G1');
+  assert.equal(s.data.Links[2][0],'G2');
   assert.equal(s.data.Links[2][2],2);
-  assert.deepEqual(s.data.Links[4],['6','101',1]);
+  assert.deepEqual(s.data.Links[4],['U6','M101',1]);
   assert.equal(s.audits.at(-1)[2],'CHANGE_PRIMARY');
-  assert.throws(()=>s.invoke('changeCatalogMemberPrimaryGroupForUniverse',{memberId:'201',primaryGroupId:'6'}),/主所属/);
+  assert.throws(()=>s.invoke('changeCatalogMemberPrimaryGroupForUniverse',{memberId:'M201',primaryGroupId:'U6'}),/主所属/);
 });

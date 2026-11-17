@@ -9,26 +9,26 @@ const source=fs.readFileSync(path.join(import.meta.dirname,'..','CatalogUnitMemb
 function fixture({auditFails=false,registered=true,badOrder=false}={}){
   const store={
     Groups:[
-      ['GroupID','GroupName','GroupKind','RecordStatus'],
-      ['1','BE:FIRST','GROUP','ACTIVE'],
-      ['2','MAZZEL','GROUP','ACTIVE'],
-      ['6','ShowMinorSavage','UNIT','ACTIVE'],
-      ['9','BMSG EAST','UNIT','ACTIVE']],
+      ['GroupID','GroupName','RecordStatus'],
+      ['G1','BE:FIRST','ACTIVE'],
+      ['G2','MAZZEL','ACTIVE'],
+      ['U6','ShowMinorSavage','ACTIVE'],
+      ['U9','BMSG EAST','ACTIVE']],
     Members:[
       ['MemberID','GroupID','DisplayName','RecordStatus'],
-      ['101','1','SOTA','ACTIVE'],
-      ['102','1','SHUNTO','ACTIVE'],
-      ['201','2','KAIRYU','ACTIVE']],
+      ['M101','G1','SOTA','ACTIVE'],
+      ['M102','G1','SHUNTO','ACTIVE'],
+      ['M201','G2','KAIRYU','ACTIVE']],
     Links:[
       ['GroupID','MemberID','DisplayOrder'],
-      ['1','101',1],
-      ['1','102',2],
-      ['2','201',1],
-      ['6','101',1],
-      ['6','102',2],
-      ['6','201',badOrder?2:3],
-      ['9','101',1],
-      ['9','201',2]
+      ['G1','M101',1],
+      ['G1','M102',2],
+      ['G2','M201',1],
+      ['U6','M101',1],
+      ['U6','M102',2],
+      ['U6','M201',badOrder?2:3],
+      ['U9','M101',1],
+      ['U9','M201',2]
     ]
   };
   const ss={};
@@ -104,50 +104,50 @@ test('unit maintenance source parses as GAS-compatible JavaScript',()=>{
 });
 test('move swaps adjacent order inside selected unit, preserving other unit and home groups',()=>{
   const x=fixture();
-  const beforeOthers=otherTables(x),east=JSON.stringify(linksOf(x,'9'));
+  const beforeOthers=otherTables(x),east=JSON.stringify(linksOf(x,'U9'));
   const result=x.call('moveCatalogUnitMemberForUniverse',{
-    groupId:'6',memberId:'201',direction:'UP',expectedOrder:3
+    groupId:'U6',memberId:'M201',direction:'UP',expectedOrder:3
   });
   assert.equal(result.ok,true);
-  assert.deepEqual(linksOf(x,'6'),[
-    {id:'101',order:1},{id:'102',order:3},{id:'201',order:2}
+  assert.deepEqual(linksOf(x,'U6'),[
+    {id:'M101',order:1},{id:'M102',order:3},{id:'M201',order:2}
   ]);
-  assert.equal(JSON.stringify(linksOf(x,'9')),east);
+  assert.equal(JSON.stringify(linksOf(x,'U9')),east);
   assert.equal(otherTables(x),beforeOthers);
   assert.equal(x.audit[0][2],'REORDER');
 });
 test('remove clears only one UNIT membership, compacts local orders and leaves other groups untouched',()=>{
   const x=fixture();
-  const beforeOthers=otherTables(x),east=JSON.stringify(linksOf(x,'9'));
-  const main=JSON.stringify(linksOf(x,'1'));
+  const beforeOthers=otherTables(x),east=JSON.stringify(linksOf(x,'U9'));
+  const main=JSON.stringify(linksOf(x,'G1'));
   const result=x.call('removeCatalogUnitMemberForUniverse',{
-    groupId:'6',memberId:'102',expectedOrder:2
+    groupId:'U6',memberId:'M102',expectedOrder:2
   });
   assert.equal(result.removed,true);
-  assert.deepEqual(linksOf(x,'6'),[{id:'101',order:1},{id:'201',order:2}]);
-  assert.equal(JSON.stringify(linksOf(x,'9')),east);
-  assert.equal(JSON.stringify(linksOf(x,'1')),main);
+  assert.deepEqual(linksOf(x,'U6'),[{id:'M101',order:1},{id:'M201',order:2}]);
+  assert.equal(JSON.stringify(linksOf(x,'U9')),east);
+  assert.equal(JSON.stringify(linksOf(x,'G1')),main);
   assert.equal(otherTables(x),beforeOthers);
   assert.equal(x.audit[0][2],'REMOVE');
 });
 test('stale order, missing membership, GROUP target and invalid order fail without writes',()=>{
   const x=fixture(),before=JSON.stringify(x.store);
   assert.throws(()=>x.call('removeCatalogUnitMemberForUniverse',{
-    groupId:'6',memberId:'102',expectedOrder:1
+    groupId:'U6',memberId:'M102',expectedOrder:1
   }),/再読み込み/);
   assert.throws(()=>x.call('removeCatalogUnitMemberForUniverse',{
-    groupId:'6',memberId:'999',expectedOrder:1
+    groupId:'U6',memberId:'999',expectedOrder:1
   }),/所属していません/);
   assert.throws(()=>x.call('moveCatalogUnitMemberForUniverse',{
-    groupId:'1',memberId:'101',direction:'UP',expectedOrder:1
+    groupId:'G1',memberId:'M101',direction:'UP',expectedOrder:1
   }),/ユニット/);
   assert.throws(()=>x.call('moveCatalogUnitMemberForUniverse',{
-    groupId:'6',memberId:'102',direction:'SIDEWAYS',expectedOrder:2
+    groupId:'U6',memberId:'M102',direction:'SIDEWAYS',expectedOrder:2
   }),/移動方向/);
   assert.equal(JSON.stringify(x.store),before);
   const invalid=fixture({badOrder:true}),old=JSON.stringify(invalid.store);
   assert.throws(()=>invalid.call('removeCatalogUnitMemberForUniverse',{
-    groupId:'6',memberId:'102',expectedOrder:2
+    groupId:'U6',memberId:'M102',expectedOrder:2
   }),/重複/);
   assert.equal(JSON.stringify(invalid.store),old);
 });
@@ -155,7 +155,7 @@ test('membership removal and reorder roll back when audit fails',()=>{
   for(const fn of ['removeCatalogUnitMemberForUniverse','moveCatalogUnitMemberForUniverse']){
     const x=fixture({auditFails:true}),before=JSON.stringify(x.store);
     assert.throws(()=>x.call(fn,{
-      groupId:'6',memberId:'102',expectedOrder:2,direction:'DOWN'
+      groupId:'U6',memberId:'M102',expectedOrder:2,direction:'DOWN'
     }),/audit refused/);
     assert.equal(JSON.stringify(x.store),before);
   }
@@ -163,12 +163,12 @@ test('membership removal and reorder roll back when audit fails',()=>{
 test('an unknown user cannot change UNIT links and boundary moves are no-ops',()=>{
   const denied=fixture({registered:false}),before=JSON.stringify(denied.store);
   assert.throws(()=>denied.call('removeCatalogUnitMemberForUniverse',{
-    groupId:'6',memberId:'102',expectedOrder:2
+    groupId:'U6',memberId:'M102',expectedOrder:2
   }),/利用ユーザー/);
   assert.equal(JSON.stringify(denied.store),before);
   const x=fixture();
   const res=x.call('moveCatalogUnitMemberForUniverse',{
-    groupId:'6',memberId:'101',expectedOrder:1,direction:'UP'
+    groupId:'U6',memberId:'M101',expectedOrder:1,direction:'UP'
   });
   assert.equal(res.unchanged,true);
   assert.equal(x.audit.length,0);
@@ -176,9 +176,9 @@ test('an unknown user cannot change UNIT links and boundary moves are no-ops',()
 test('removing a member never deletes the member master or other memberships',()=>{
   const x=fixture(),p=JSON.stringify(x.store.Members);
   x.call('removeCatalogUnitMemberForUniverse',{
-    groupId:'6',memberId:'101',expectedOrder:1
+    groupId:'U6',memberId:'M101',expectedOrder:1
   });
   assert.equal(JSON.stringify(x.store.Members),p);
-  assert.ok(linksOf(x,'1').some(x=>x.id==='101'));
-  assert.ok(linksOf(x,'9').some(x=>x.id==='101'));
+  assert.ok(linksOf(x,'G1').some(x=>x.id==='M101'));
+  assert.ok(linksOf(x,'U9').some(x=>x.id==='M101'));
 });

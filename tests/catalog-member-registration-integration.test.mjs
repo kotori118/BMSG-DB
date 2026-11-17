@@ -8,13 +8,13 @@ const source=fs.readFileSync(path.join(import.meta.dirname,'..','CatalogManageme
 
 function makeEnvironment({auditFails=false}={}){
   const data={
-    Groups:[['GroupID','GroupName','ColorHex','DisplayOrder','GroupKind','RecordStatus'],
-      ['1','BE:FIRST','#0000FF',1,'GROUP','ACTIVE'],['2','MAZZEL','#FF0000',2,'GROUP','ACTIVE']],
+    Groups:[['GroupID','GroupName','ColorHex','DisplayOrder','RecordStatus'],
+      ['G1','BE:FIRST','#0000FF',1,'ACTIVE'],['G2','MAZZEL','#FF0000',2,'ACTIVE']],
     Members:[['MemberID','GroupID','DisplayName','ColorHex','DisplayOrder','RecordStatus'],
-      ['201','2','KAIRYU','#334080',7,'ACTIVE'],['507','','FUMINO','',33,'ACTIVE']],
+      ['M201','G2','KAIRYU','#334080',7,'ACTIVE'],['M507','','FUMINO','',33,'ACTIVE']],
     Links:[['GroupID','MemberID','DisplayOrder'],
-      ...Array.from({length:8},(_,i)=>['2',String(201+i),i+1])],
-    Profiles:[['MemberID','P000'],['201',1],['507','']],
+      ...Array.from({length:8},(_,i)=>['G2','M'+String(201+i),i+1])],
+    Profiles:[['MemberID','P000'],['M201',1],['M507','']],
     Audit:[['AuditID','EntityType','EntityID','Action','BeforeJSON','AfterJSON','ActorEmail','OccurredAt','Source']]
   };
   const sheets={};
@@ -34,7 +34,7 @@ function makeEnvironment({auditFails=false}={}){
   const vmEnv={
     BU1:{
       SHEETS:{GROUPS:'Groups',MEMBERS:'Members',GROUP_MEMBERS:'Links',PROFILES:'Profiles',SONGS:'Songs'},
-      MAIN_GROUP_BANDS:{'BE:FIRST':100,MAZZEL:200,'ソロ・その他':500}, LOG_DB_ID:'log'
+      LOG_DB_ID:'log'
     },
     clean_:(v)=>v==null?'':String(v).trim(),
     id_:(v)=>v==null?'':String(v).trim(),
@@ -50,8 +50,8 @@ function makeEnvironment({auditFails=false}={}){
     openCoreSpreadsheet_:()=>ss,
     withSharedWriterLock_:(_label,fn)=>fn(),
     reserveNumberForKey_:(_ss,key)=>{
-      assert.equal(key,'NEXT_MEMBER_ID_200');
-      return {issuedId:'209',numericValue:209};
+      assert.equal(key,'NEXT_MEMBER_ID_GLOBAL');
+      return {issuedId:'M508',numericValue:508};
     },
     finalizeIdReservation_:(_r,committed)=>finalize.push(committed),
     appendStyledRow_:(sh,values)=>{
@@ -72,7 +72,7 @@ function makeEnvironment({auditFails=false}={}){
   // a separate explicit staging test.
   vmEnv.catalogRequireReady_=()=>{};
   const create=(payload)=>vm.runInContext('createCatalogMemberForUniverse('+JSON.stringify({
-    userId:'U001',name:'QA_MEMBER',primaryGroupId:'2',color:'#AABBCC',...payload
+    userId:'U001',name:'QA_MEMBER',primaryGroupId:'G2',color:'#AABBCC',...payload
   })+')',vmEnv);
   return{create,data,finalize};
 }
@@ -80,12 +80,12 @@ function makeEnvironment({auditFails=false}={}){
 test('member creation uses GLOBAL DisplayOrder but GROUP-local membership order',()=>{
   const x=makeEnvironment(),result=x.create();
   assert.equal(result.ok,true);
-  assert.equal(result.memberId,'209');
-  const member=x.data.Members.find(r=>r[0]==='209');
-  const link=x.data.Links.find(r=>r[1]==='209');
+  assert.equal(result.memberId,'M508');
+  const member=x.data.Members.find(r=>r[0]==='M508');
+  const link=x.data.Links.find(r=>r[1]==='M508');
   assert.equal(member[4],34,'02_Members.DisplayOrder must follow global maximum 33');
   assert.equal(link[2],9,'04_GroupMembers.DisplayOrder must follow group 2 maximum 8');
-  assert.equal(x.data.Profiles.at(-1)[0],'209');
+  assert.equal(x.data.Profiles.at(-1)[0],'M508');
   assert.equal(x.data.Audit.length,2);
   assert.deepEqual(x.finalize,[true]);
 });

@@ -72,7 +72,7 @@ function validateRequiredHeaders_(ss) {
   defs[BU1.SHEETS.SONGS] = ['SongID', 'Title', 'Artist', 'ReleaseDate', 'Form', 'CDTitle', 'IsTitleTrack'];
   defs[BU1.SHEETS.SONG_CREDITS] = ['SongID', 'Title', 'Lyricists', 'Composers', 'Choreographers'];
   defs[BU1.SHEETS.LYRICS_PARTS] = ['SongID', 'PartOrder', 'Singer', 'Lyrics'];
-  defs[BU1.SHEETS.CARDS] = ['ImageID', 'TargetType', 'TargetID', 'Rarity', 'DriveFileID', 'DisplayOrder', 'IsProfileMain'];
+  defs[BU1.SHEETS.CARDS] = ['ImageID', 'MemberID', 'Rarity', 'DriveFileID', 'IsProfileMain'];
   const errors = [];
   Object.keys(defs).forEach(name => {
     const sheet = ss.getSheetByName(name);
@@ -189,13 +189,19 @@ function idRegistryTable_() {
 
 function resolveIssueSpec_(ss, key) {
   let m;
-  if (key === 'NEXT_GROUP_ID') {
-    return { entity:'GROUP', scope:'GLOBAL', liveMax:maxNumericColumn_(requireSheet_(ss, BU1.SHEETS.GROUPS), 'GroupID') };
+  if (key === 'NEXT_GROUP_ID_GROUP' || key === 'NEXT_GROUP_ID_UNIT') {
+    const prefix = key === 'NEXT_GROUP_ID_GROUP' ? 'G' : 'U';
+    return { entity:'GROUP', scope:'GLOBAL',
+      liveMax:maxPrefixedNumericColumn_(requireSheet_(ss,BU1.SHEETS.GROUPS),'GroupID',/^[GU](\d+)$/),
+      formatter:function(n){return prefix+n;} };
   }
-  if ((m = String(key).match(/^NEXT_MEMBER_ID_(\d+)$/))) {
-    const band = Number(m[1]);
-    return { entity:'MEMBER', scope:String(band), liveMax:maxNumericColumnInBand_(requireSheet_(ss, BU1.SHEETS.MEMBERS), 'MemberID', band, band + 99) };
+  if (key === 'NEXT_MEMBER_ID_GLOBAL') {
+    return { entity:'MEMBER', scope:'GLOBAL',
+      liveMax:maxPrefixedNumericColumn_(requireSheet_(ss,BU1.SHEETS.MEMBERS),'MemberID',/^M(\d+)$/),
+      formatter:function(n){return 'M'+n;} };
   }
+  if (key === 'NEXT_GROUP_ID' || /^NEXT_MEMBER_ID_\d+$/.test(key))
+    throw new Error('番号帯方式の旧採番キーは廃止されました。G/U/M対応の新採番を使用してください。');
   if (key === 'NEXT_GUEST_ID') {
     return { entity:'GUEST', scope:'GLOBAL', liveMax:maxNumericColumn_(requireSheet_(ss, BU1.SHEETS.GUESTS), 'GuestID') };
   }
@@ -208,6 +214,15 @@ function resolveIssueSpec_(ss, key) {
   }
   if (key === 'NEXT_IMAGE_ID') throw new Error('ImageIDはBMSG-PJの画像管理だけが発行します。');
   throw new Error('未対応の採番キーです: ' + key);
+}
+
+function maxPrefixedNumericColumn_(sheet, headerName, pattern) {
+  const table=readTable_(sheet), col=table.map[headerName];
+  if(col==null)throw new Error(sheet.getName()+' に列「'+headerName+'」がありません');
+  return table.rows.reduce(function(max,row){
+    const match=id_(row.values[col]).match(pattern);
+    return match ? Math.max(max,Number(match[1])) : max;
+  },0);
 }
 
 function maxNumericColumn_(sheet, headerName) {
@@ -247,7 +262,7 @@ function reserveNumberForKey_(ss, key, source, note) {
   let registryMax = 0;
   table.rows.forEach(function(row){
     if (clean_(row.values[table.map.EntityType]).toUpperCase() !== spec.entity) return;
-    if (clean_(row.values[table.map.Scope]) !== spec.scope) return;
+    if (!(spec.entity === 'MEMBER' && spec.scope === 'GLOBAL') && clean_(row.values[table.map.Scope]) !== spec.scope) return;
     const n = Number(row.values[table.map.NumericValue]);
     if (Number.isFinite(n)) registryMax = Math.max(registryMax, n);
   });
@@ -284,7 +299,7 @@ function issueNumber_(ss, key) {
   return withSharedWriterLock_('ID採番', function(){
     const reservation = reserveNumberForKey_(ss, key, 'BMSG-DB_LEGACY', '旧管理ルートからの採番');
     finalizeIdReservation_(reservation, true, '旧管理ルートで発行済み');
-    return reservation.numericValue;
+    return key === 'NEXT_GROUP_ID_GROUP' || key === 'NEXT_GROUP_ID_UNIT' || key === 'NEXT_MEMBER_ID_GLOBAL' ? reservation.issuedId : reservation.numericValue;
   });
 }
 

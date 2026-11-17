@@ -276,8 +276,7 @@ function applyProfileSyncPlan_(ss, plan) {
 
   const allItems = [];
   plan.newMembers.forEach(item => {
-    const band = BU1.MAIN_GROUP_BANDS[item.mainGroupName] || 500;
-    const memberId = String(issueNumber_(ss, 'NEXT_MEMBER_ID_' + band));
+    const memberId = String(issueNumber_(ss, 'NEXT_MEMBER_ID_GLOBAL'));
     item.memberId = memberId;
     input.getRange(item.inputRow, 3).setValue(memberId);
     appendStyledRow_(membersSheet, [memberId, item.groupId, item.name, item.colorHex, item.displayOrder]);
@@ -318,7 +317,7 @@ function applyProfileSyncPlan_(ss, plan) {
     });
   });
 
-  plan.deletes.slice().sort((a, b) => Number(b.memberId) - Number(a.memberId)).forEach(item => {
+  plan.deletes.slice().sort((a, b) => Number(String(b.memberId).replace(/^M/,'')) - Number(String(a.memberId).replace(/^M/,''))).forEach(item => {
     deleteUnreferencedMember_(ss, item.memberId);
   });
   keepThreeEmptyProfileColumns_(input);
