@@ -55,6 +55,17 @@ function make(enabled){
   };
   vm.createContext(env);
   vm.runInContext(code,env);
+  // Code.gs declares its own GAS helper functions; replace ONLY dependency
+  // functions after evaluating the actual validator under test.
+  env.requireSheet_=(_ss,name)=>{
+    const sheet=ss.getSheetByName(name);if(!sheet)throw Error('missing '+name);return sheet;
+  };
+  env.readTable_=(sheet)=>({
+    map:Object.fromEntries((data.get(sheet.getName())||[]).map((n,i)=>[n,i])),rows:[]
+  });
+  env.idRegistryTable_=()=>{};
+  env.alert_=()=>{};
+  env.ensureLyricsInputLayout_=()=>{throw new Error('legacy initializer must not run in site-only mode');};
   const validate=()=>vm.runInContext('validateUniverseStructure()',env);
   const open=()=>vm.runInContext('onOpen()',env);
   const block=()=>vm.runInContext("blockLegacySheetWrite_('旧シート入力')",env);
