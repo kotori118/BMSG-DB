@@ -14,7 +14,7 @@ const core=[
  ['06_Songs',['SongID','Title','Artist','ReleaseDate','Form','CDTitle','IsTitleTrack']],
  ['07_SongCredits',['SongID','Title','Lyricists','Composers','Choreographers']],
  ['08_LyricsParts',['SongID','PartOrder','Singer','Lyrics']],
- ['09_Images',['ImageID','TargetType','TargetID','Rarity','DriveFileID','DisplayOrder','IsProfileMain']],
+ ['09_Images',['ImageID','MemberID','Rarity','DriveFileID','IsProfileMain']],
  ['10_PerformanceMetrics',['SongID']]
 ];
 function make(enabled){
