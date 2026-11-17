@@ -1,0 +1,50 @@
+import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import vm from 'node:vm';
+import test from 'node:test';
+
+const root=path.resolve(import.meta.dirname,'..');
+const catalog=fs.readFileSync(path.join(root,'CatalogManagement.gs'),'utf8');
+const writer=fs.readFileSync(path.join(root,'UniverseService.gs'),'utf8');
+
+test('catalog is opt-in and rejects anonymous/unapproved users',()=>{
+  const sandbox={
+    result:[],
+    PropertiesService:{getScriptProperties:()=>({getProperty:(k)=>k==='UNIVERSE_CATALOG_ENABLED'?'false':''})},
+    Session:{getActiveUser:()=>({getEmail:()=>''})},
+    requireUniverseServiceUser_:()=>true
+  };
+  vm.runInNewContext(catalog+'\nresult.push((()=>{try{catalogRequireAdmin_({userId:"U001"});return "allowed";}catch(e){return e.message}})());',sandbox);
+  assert.match(sandbox.result[0],/有効化されていません/);
+  sandbox.PropertiesService={getScriptProperties:()=>({getProperty:(k)=>k==='UNIVERSE_CATALOG_ENABLED'?'true':'owner@example.com'})};
+  vm.runInNewContext('result.push((()=>{try{catalogRequireAdmin_({userId:"U001"});return "allowed";}catch(e){return e.message}})());',sandbox);
+  assert.match(sandbox.result[1],/管理操作できません/);
+});
+
+test('site writer keeps registry allocation and a lyricless opt-in',()=>{
+  assert.match(writer,/if \(!parts\.length && !context\.allowEmptyParts\)/);
+  assert.match(writer,/reserveNumberForKey_\(ss, 'NEXT_SONG_ID_'/);
+  assert.match(catalog,/createSongWithPartsCore_\(ss,song,credits,\[\],\{/);
+  assert.match(catalog,/allowEmptyParts:true/);
+  assert.match(catalog,/saveCatalogSoloForUniverse/);
+});
+
+test('catalog has explicit backup and schema gates',()=>{
+  assert.match(catalog,/UNIVERSE_CATALOG_BACKUP_ID/);
+  assert.match(catalog,/MIGRATE_CATALOG_V1/);
+  assert.match(catalog,/catalogRequireReady_\(ss\)/);
+  assert.match(catalog,/catalogAudit_\(/);
+});
+
+test('record updates touch only requested columns, preserving unrelated formulas',()=>{
+  assert.match(catalog,/sheet\.getRange\(row\.rowNumber,col\.column\)\.setValue\(col\.newValue\)/);
+  assert.doesNotMatch(catalog,/sheet\.getRange\(row\.rowNumber,1,1,after\.length\)\.setValues/);
+});
+
+test('songs are archived reversibly; released IDs are never deleted',()=>{
+  assert.match(catalog,/function setCatalogSongArchiveForUniverse/);
+  assert.match(catalog,/ARCHIVED/);
+  assert.match(catalog,/RecordStatus:target/);
+  assert.doesNotMatch(catalog,/deleteRow\(row\.rowNumber\)/);
+});
