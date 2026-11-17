@@ -16,7 +16,7 @@ const BU1 = Object.freeze({
     GUESTS: '03_Guests', GROUP_MEMBERS: '04_GroupMembers',
     PROFILES: '05_Profiles', SONGS: '06_Songs', SONG_CREDITS: '07_SongCredits',
     LYRICS_PARTS: '08_LyricsParts', CARDS: '09_Images',
-    TRANSFERS: '11_PartTransfers',
+    METRICS: '10_PerformanceMetrics', TRANSFERS: '11_PartTransfers',
   }),
   COLORS: Object.freeze({ INPUT: '#FFF9D6', AUTO: '#EFEFEF', ERROR: '#F4CCCC' }),
   CARD_RARITIES: Object.freeze(['SSR', 'SR', 'R', 'N']),
