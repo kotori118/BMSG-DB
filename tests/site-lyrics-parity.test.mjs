@@ -8,10 +8,10 @@ const source=fs.readFileSync(path.join(import.meta.dirname,'..','UniverseService
 
 function makeFixture({failAt='' }={}){
   const store={
-    Groups:[['GroupID','GroupName'],['1','BE:FIRST']],
-    Members:[['MemberID','GroupID','DisplayName'],['101','1','SOTA'],['102','1','SHUNTO']],
+    Groups:[['GroupID','GroupName'],['G1','BE:FIRST']],
+    Members:[['MemberID','GroupID','DisplayName'],['M101','G1','SOTA'],['M102','G1','SHUNTO']],
     Guests:[['GuestID','DisplayName']],
-    Songs:[['SongID','Title','Artist','ReleaseDate','Form','CDTitle','IsTitleTrack']],
+    Songs:[['SongID','Title','Artist','ReleaseDate','Form','CDTitle','IsTitleTrack','ArtistRef']],
     Credits:[['SongID','Title','Lyricists','Composers','Choreographers']],
     Parts:[['SongID','PartOrder','Singer','Lyrics']],
     Metrics:[['SongID','SOTA_Singing','SOTA_Center'],['単位','秒','秒']]
