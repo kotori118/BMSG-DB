@@ -438,7 +438,6 @@ function createSongWithPartsCore_(ss, song, credits, parsedParts, context) {
     songValues[songsTable.map.Form] = song.form;
     songValues[songsTable.map.CDTitle] = song.cdTitle;
     songValues[songsTable.map.IsTitleTrack] = song.isTitleTrack;
-    if (songsTable.map.RecordStatus != null) songValues[songsTable.map.RecordStatus] = 'ACTIVE';
     if (songsTable.map.SongType != null) songValues[songsTable.map.SongType] = context.songType || 'NORMAL';
     if (songsTable.map.SoloMemberID != null) songValues[songsTable.map.SoloMemberID] = context.soloMemberId || '';
     rollback.push({sheet:songsSheet,row:appendStyledRow_(songsSheet, songValues)});
@@ -473,7 +472,10 @@ function createSongWithPartsCore_(ss, song, credits, parsedParts, context) {
       rollback.push({sheet:partsSheet,row:appendStyledRow_(partsSheet, values)});
     });
 
-    if (song.artist === 'BE:FIRST') syncPerformanceMetricRows(ss, true);
+    if (song.artist === 'BE:FIRST') {
+      const metric=ensurePerformanceMetricRowForSong_(ss,reservation.issuedId);
+      if(metric.created)rollback.push({sheet:metric.sheet,row:metric.row});
+    }
     SpreadsheetApp.flush();
     const verifySongs = readTable_(songsSheet).rows.filter(function(r){ return id_(r.values[songsTable.map.SongID]) === reservation.issuedId; });
     const verifyPartsTable = readTable_(partsSheet);
@@ -486,7 +488,6 @@ function createSongWithPartsCore_(ss, song, credits, parsedParts, context) {
     rollback.sort(function(a,b){ return b.row-a.row; }).forEach(function(item){
       try { if (item.row >= 2 && item.row <= item.sheet.getLastRow()) item.sheet.deleteRow(item.row); } catch (ignore) {}
     });
-    if (song.artist === 'BE:FIRST') try { syncPerformanceMetricRows(ss, true); } catch (ignore) {}
     try { finalizeIdReservation_(reservation, false, '新規曲登録失敗: ' + song.title); } catch (ignore) {}
     throw e;
   }
