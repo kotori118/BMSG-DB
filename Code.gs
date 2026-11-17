@@ -1,3 +1,4 @@
+/** TEST-ONLY SOURCE. Do not merge/deploy; library binding must use separate staging script. */
 /**
  * BMSG Universe 管理GAS
  * 共通設定・メニュー・安全な読書きヘルパー
@@ -5,8 +6,8 @@
 
 const BU1 = Object.freeze({
   VERSION: '1.1.0',
-  CORE_DB_ID: '1-1AY6-BACOaGW3HIgYS0UjFMPSh-cjvYMMnJ_UYoRFY',
-  LOG_DB_ID: '10vDKc_Q431iMDTTqB2A16i-Yp28oXSInoKiJXZtonRQ',
+  CORE_DB_ID: '1VANjD182-JPIYkYJ6J-6FdqQ5d8nZXsX9iyIhIlfyPk',
+  LOG_DB_ID: '1-j0QqCQKvSyMFSFifZ0hdNIuQ8cmfkRTuop1eGlj1Kk',
   CARD_IMAGE_FOLDER_ID: '1ayh-EAbV585JqRofClrTHjBxNTQlfQBK',
   ID_REGISTRY_SHEET: 'IDRegistry',
   SHEETS: Object.freeze({
@@ -72,7 +73,7 @@ function validateRequiredHeaders_(ss) {
   defs[BU1.SHEETS.SONGS] = ['SongID', 'Title', 'Artist', 'ReleaseDate', 'Form', 'CDTitle', 'IsTitleTrack'];
   defs[BU1.SHEETS.SONG_CREDITS] = ['SongID', 'Title', 'Lyricists', 'Composers', 'Choreographers'];
   defs[BU1.SHEETS.LYRICS_PARTS] = ['SongID', 'PartOrder', 'Singer', 'Lyrics'];
-  defs[BU1.SHEETS.CARDS] = ['ImageID', 'TargetType', 'TargetID', 'Rarity', 'DriveFileID', 'DisplayOrder', 'IsProfileMain'];
+  defs[BU1.SHEETS.CARDS] = ['ImageID', 'MemberID', 'Rarity', 'DriveFileID', 'IsProfileMain'];
   const errors = [];
   Object.keys(defs).forEach(name => {
     const sheet = ss.getSheetByName(name);
@@ -189,13 +190,19 @@ function idRegistryTable_() {
 
 function resolveIssueSpec_(ss, key) {
   let m;
-  if (key === 'NEXT_GROUP_ID') {
-    return { entity:'GROUP', scope:'GLOBAL', liveMax:maxNumericColumn_(requireSheet_(ss, BU1.SHEETS.GROUPS), 'GroupID') };
+  if (key === 'NEXT_GROUP_ID_GROUP' || key === 'NEXT_GROUP_ID_UNIT') {
+    const prefix = key === 'NEXT_GROUP_ID_GROUP' ? 'G' : 'U';
+    return { entity:'GROUP', scope:'GLOBAL',
+      liveMax:maxPrefixedNumericColumn_(requireSheet_(ss,BU1.SHEETS.GROUPS),'GroupID',/^[GU](\d+)$/),
+      formatter:function(n){return prefix+n;} };
   }
-  if ((m = String(key).match(/^NEXT_MEMBER_ID_(\d+)$/))) {
-    const band = Number(m[1]);
-    return { entity:'MEMBER', scope:String(band), liveMax:maxNumericColumnInBand_(requireSheet_(ss, BU1.SHEETS.MEMBERS), 'MemberID', band, band + 99) };
+  if (key === 'NEXT_MEMBER_ID_GLOBAL') {
+    return { entity:'MEMBER', scope:'GLOBAL',
+      liveMax:maxPrefixedNumericColumn_(requireSheet_(ss,BU1.SHEETS.MEMBERS),'MemberID',/^M(\d+)$/),
+      formatter:function(n){return 'M'+n;} };
   }
+  if (key === 'NEXT_GROUP_ID' || /^NEXT_MEMBER_ID_\d+$/.test(key))
+    throw new Error('番号帯方式の旧採番キーは廃止されました。G/U/M対応の新採番を使用してください。');
   if (key === 'NEXT_GUEST_ID') {
     return { entity:'GUEST', scope:'GLOBAL', liveMax:maxNumericColumn_(requireSheet_(ss, BU1.SHEETS.GUESTS), 'GuestID') };
   }
@@ -208,6 +215,15 @@ function resolveIssueSpec_(ss, key) {
   }
   if (key === 'NEXT_IMAGE_ID') throw new Error('ImageIDはBMSG-PJの画像管理だけが発行します。');
   throw new Error('未対応の採番キーです: ' + key);
+}
+
+function maxPrefixedNumericColumn_(sheet, headerName, pattern) {
+  const table=readTable_(sheet), col=table.map[headerName];
+  if(col==null)throw new Error(sheet.getName()+' に列「'+headerName+'」がありません');
+  return table.rows.reduce(function(max,row){
+    const match=id_(row.values[col]).match(pattern);
+    return match ? Math.max(max,Number(match[1])) : max;
+  },0);
 }
 
 function maxNumericColumn_(sheet, headerName) {
@@ -247,7 +263,7 @@ function reserveNumberForKey_(ss, key, source, note) {
   let registryMax = 0;
   table.rows.forEach(function(row){
     if (clean_(row.values[table.map.EntityType]).toUpperCase() !== spec.entity) return;
-    if (clean_(row.values[table.map.Scope]) !== spec.scope) return;
+    if (!(spec.entity === 'MEMBER' && spec.scope === 'GLOBAL') && clean_(row.values[table.map.Scope]) !== spec.scope) return;
     const n = Number(row.values[table.map.NumericValue]);
     if (Number.isFinite(n)) registryMax = Math.max(registryMax, n);
   });
