@@ -116,3 +116,13 @@ test('sheet-entry routes can be locked when site-only mode is enabled',()=>{
     }
   }
 });
+
+test('identifier allocation stays within the owning artist/member band',()=>{
+  assert.match(writer,/Number\(reservation\.numericValue\)>band\+999/);
+  assert.match(catalog,/Number\(res\.numericValue\)>band\+99/);
+});
+test('schema installation checks existing catalog audit table headers before mutation',()=>{
+  assert.match(catalog,/existingAudit/);
+  assert.match(catalog,/列構造に不整合があります/);
+  assert.match(catalog,/Log\.CATALOG_Audit\./);
+});
