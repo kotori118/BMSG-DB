@@ -40,6 +40,10 @@ function moveCatalogMemberDisplayOrderForUniverse(payload) {
     const idx=peers.findIndex(function(r){return r.rowNumber===current.rowNumber;});
     const next=peers[idx+(direction==='UP'?-1:1)];
     if(!next)return {ok:true,memberId:id,unchanged:true};
+    const links=catalogTable_(ss,BU1.SHEETS.GROUP_MEMBERS,['GroupID','MemberID','DisplayOrder']);
+    const primaryLinks=[current,next].map(function(member){return catalogRow_({sheet:links.sheet,map:links.map,rows:links.rows.filter(function(r){return id_(r.values[links.map.GroupID])===group;})},'MemberID',member.values[m.map.MemberID]);});
+    const primaryOrders=primaryLinks.map(function(r){return r.values[links.map.DisplayOrder];});
+    if(primaryOrders.some(function(n){return !Number.isSafeInteger(Number(n))||Number(n)<1;})||Number(primaryOrders[0])===Number(primaryOrders[1]))throw new Error('主所属の表示順を点検してください。');
     const col=m.map.DisplayOrder+1,sh=m.sheet,undos=[];
     const a=sh.getRange(current.rowNumber,col),z=sh.getRange(next.rowNumber,col);
     const beforeA=a.getValue(),beforeZ=z.getValue();
@@ -49,6 +53,7 @@ function moveCatalogMemberDisplayOrderForUniverse(payload) {
     try{
       memberMaintenanceCellWrite_(a,beforeZ,undos);
       memberMaintenanceCellWrite_(z,beforeA,undos);
+      primaryLinks.forEach(function(link,i){memberMaintenanceCellWrite_(links.sheet.getRange(link.rowNumber,links.map.DisplayOrder+1),primaryOrders[1-i],undos);});
       SpreadsheetApp.flush();
       if(String(a.getValue())!==String(beforeZ)||String(z.getValue())!==String(beforeA))
         throw new Error('表示順の保存確認に失敗しました。');

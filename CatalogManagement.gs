@@ -12,7 +12,7 @@ const BU_CATALOG_SCHEMA_ = Object.freeze({
   members:['RecordStatus'],
   songs:['SongType','SoloMemberID']
 });
-const BU_CATALOG_MAIN_GROUP_NAMES_ = Object.freeze(['BE:FIRST','MAZZEL','STARGLOW','HANA']);
+const BU_CATALOG_MAIN_GROUP_NAMES_ = Object.freeze(['BE:FIRST','MAZZEL','STARGLOW','HANA','ShowMinorSavage']);
 const BU_CATALOG_SOLOS_ = Object.freeze({
   '1068':{title:'Want it',member:'SHUNTO'},
   '1069':{title:'Rain on me',member:'MANATO'},
