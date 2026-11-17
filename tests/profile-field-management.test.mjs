@@ -15,7 +15,7 @@ test('profile-field module parses and keeps writes behind opt-in + backups',()=>
   assert.match(src,/reserveNumberForKey_\(ss,'NEXT_PROFILE_ID'/);
   assert.match(src,/finalizeIdReservation_\(reserved,true/);
   assert.match(src,/finalizeIdReservation_\(reserved,false/);
-  assert.match(src,/P\d\{3\}/);
+  assert.match(src,/ProfileIDの上限P999/);
 });
 
 test('profile metadata validates names, types and compatible multivalue fields',()=>{
@@ -56,7 +56,7 @@ test('field hide / restore changes only ProfileSettings.IsActive and retains val
     map:{MemberID:0,P000:1,P001:2},
     rows:[{rowNumber:2,values:['101',1,'テスト']}]
   };
-  const settings={header:headers,map,rows:original};
+  const settings={header:headers,map,rows:original,sheet:null};
   const audits=[];
   const log={
     getRange:(row,col)=>{
@@ -67,6 +67,7 @@ test('field hide / restore changes only ProfileSettings.IsActive and retains val
       };
     }
   };
+  settings.sheet=log;
   const context={
     clean_:(v)=>v==null?'':String(v).trim(),
     id_:(v)=>String(v).trim(),
