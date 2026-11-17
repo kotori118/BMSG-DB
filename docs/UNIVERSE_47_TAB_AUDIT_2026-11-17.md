@@ -1,6 +1,6 @@
-# Universe DB structural audit — 2026-11-17 (47-tab baseline / 46-tab current)
+# Universe DB structural audit — 2026-11-17 (47-tab baseline / 45-tab current)
 
-Original audit scope: Core DB 25 tabs, Log DB 22 tabs. On explicit user request, the empty 13_VideoSegments tab was subsequently deleted from the Core DB after backup; current Core=24 and Log=22. Static reference absence does NOT establish that deletion is safe in general. No deployment occurred.
+Original audit scope: Core DB 25 tabs, Log DB 22 tabs. By explicit user instruction, the empty 13_VideoSegments was removed after backup; then 12_Videos (83 video records, all not_started) was **backed up and deleted on 2026-11-17**. Current Core=23 and Log=22. No GAS/site deployment. The video analysis workflow moves outside Universe.
 
 ## Core DB (25/25)
 | Tab | Disposition | Reason |
@@ -28,10 +28,10 @@ Original audit scope: Core DB 25 tabs, Log DB 22 tabs. On explicit user request,
 | 削除予定_移行_要確認 | RETIRE CANDIDATE | Header only; verify no outstanding issues elsewhere |
 | 削除予定_確認_カード同期 | REVIEW | Legacy card sync screen, 3 explanatory rows |
 | 削除予定_06_MemberTags | REVIEW | Historical tags, 92 first-column records |
-| 12_Videos | KEEP pending implementation review | 83 video records; direct references not detected in two scanned repos |
+| 12_Videos | **DELETED 2026-11-17 at user request** | 83 records (not_started); full Core DB backup with all 83 rows: 1Zupx1sdRGe6kW4oTKPfzJ9Wf47P_2ZFXo-xq_Q59UOA; video analysis will be managed separately |
 | 13_VideoSegments | **DELETED 2026-11-17 at user request** | Header-only (0 data rows); no direct BMSG-PJ/BMSG-DB code references found. Backup: 1P9WmojQTZjHSgaiAZ7x0_QxKWmFWxAa12ixNiBoaOtw |
 
-Core baseline categories: 12 operational KEEP, 1 history KEEP, 4 site-parity sunset, 1 retired-after-cutover, 6 REVIEW, 1 retire candidate = 25. **Current Core=24** after deleting 13_VideoSegments; all other sheets preserved.
+Baseline = Core 25 / Log 22. **Current Core=23**, after deleting 13_VideoSegments and 12_Videos; Log=22. 10_PerformanceMetrics and 3 legacy input tabs retained.
 
 ## Log DB (22/22)
 | Tabs | Disposition | Code or purpose |
@@ -54,10 +54,10 @@ Core baseline categories: 12 operational KEEP, 1 history KEEP, 4 site-parity sun
 - 11_PartTransfers was disconnected only in development branches. Production site and DB library are still old; **do not delete the live sheet first**. Back up, deploy compatible code when separately authorized, test, then delete.
 - 07_SongCredits.Title is redundant but remains for compatibility until all readers are migrated.
 - Hidden profile tables contain historical data: do full field-by-field reconciliation with 05_Profiles and Log ProfileSettings before any deletion.
-- 12_Videos remains with 83 existing video records. 13_VideoSegments was removed on explicit instruction after backing up the entire workbook. Any future segment analysis must introduce a new, user-approved storage design; existing video master must not be disturbed.
+- 12_Videos (83 records) and 13_VideoSegments (0 data rows) have both been deleted on explicit instruction after separate full-Core backups. Original video records remain in the backup listed above. Video analytics should use a separate, future approved storage project; do not recreate Universe video tabs.
 - Check external Google Sheet formulas, YouTube analytics and setlists before schema or deletion changes.
 
 ## Next work item: site capability gap audit
 Compare every existing legacy spreadsheet write operation against site actions: group/member/unit CRUD, membership add/remove/reorder, profile field create/retire/restore, song/credits/lyrics editing, guest and image management, safe song delete, and audit/permissions. Prioritize the smallest missing operations first.
 
-**No merge, no schema migration, no production Sheet editing, no deployment in this audit.**
+**No merge, no GAS schema migration, and no site deployment.** The only Core edits on 2026-11-17 were explicitly authorized deletions of 13_VideoSegments and 12_Videos after backups.
