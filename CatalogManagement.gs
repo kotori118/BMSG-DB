@@ -65,7 +65,6 @@ function catalogAudit_(kind,id,action,before,after,actor) {
   const t=readTable_(sheet);
   requireColumns_(t,['AuditID','EntityType','EntityID','Action','BeforeJSON','AfterJSON','ActorEmail','OccurredAt','Source']);
   const vals=new Array(t.header.length).fill('');
-  Object.keys({AuditID:1}).forEach(()=>{}); // intentionally no dependency on column order
   const obj={AuditID:Utilities.getUuid(),EntityType:kind,EntityID:String(id),Action:action,
     BeforeJSON:JSON.stringify(before||null),AfterJSON:JSON.stringify(after||null),
     ActorEmail:actor,OccurredAt:new Date().toISOString(),Source:'BMSG-PJ_SITE_CATALOG'};
@@ -74,22 +73,35 @@ function catalogAudit_(kind,id,action,before,after,actor) {
 }
 function catalogStatus_(table,row){return clean_(row.values[table.map.RecordStatus])||'ACTIVE';}
 function catalogWriteRecord_(table,row,updates,kind,action,actor) {
-  const before=row.values.slice(),after=before.slice();
-  Object.keys(updates).forEach(k=>{if(table.map[k]==null)throw new Error(k+'列がありません。');after[table.map[k]]=updates[k];});
+  const before=row.values.slice();
+  const after=before.slice();
+  const columns=Object.keys(updates).map(k=>{
+    if(table.map[k]==null)throw new Error(k+'列がありません。');
+    after[table.map[k]]=updates[k];
+    return {name:k,column:table.map[k]+1,oldValue:before[table.map[k]],newValue:updates[k]};
+  });
   const sheet=table.sheet;
+  const applied=[];
   try {
-    sheet.getRange(row.rowNumber,1,1,after.length).setValues([after]);
-    SpreadsheetApp.flush();
-    const live=sheet.getRange(row.rowNumber,1,1,after.length).getValues()[0];
-    Object.keys(updates).forEach(k=>{
-      if(String(live[table.map[k]])!==String(after[table.map[k]]))
-        throw new Error(k+'の保存後照合に失敗しました。');
+    columns.forEach(col=>{
+      sheet.getRange(row.rowNumber,col.column).setValue(col.newValue);
+      applied.push(col);
     });
-    catalogAudit_(kind,before[table.map[kind==='SONG'?'SongID':kind==='GROUP'?'GroupID':'MemberID']],action,catalogRec_(table,row),
-      catalogRec_(table,{values:live}),actor);
+    SpreadsheetApp.flush();
+    columns.forEach(col=>{
+      const actual=sheet.getRange(row.rowNumber,col.column).getValue();
+      if(String(actual)!==String(col.newValue))
+        throw new Error(col.name+'の保存後照合に失敗しました。');
+    });
+    const entityKey=kind==='SONG'?'SongID':kind==='GROUP'?'GroupID':'MemberID';
+    catalogAudit_(kind,before[table.map[entityKey]],action,
+      catalogRec_(table,row),catalogRec_(table,{values:after}),actor);
     return {ok:true};
   }catch(e){
-    try{sheet.getRange(row.rowNumber,1,1,before.length).setValues([before]);SpreadsheetApp.flush();}catch(ignore){}
+    applied.reverse().forEach(col=>{
+      try{sheet.getRange(row.rowNumber,col.column).setValue(col.oldValue);}catch(ignore){}
+    });
+    SpreadsheetApp.flush();
     throw e;
   }
 }
