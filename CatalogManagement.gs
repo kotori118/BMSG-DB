@@ -327,12 +327,21 @@ function createCatalogMemberForUniverse(payload){
     const rows=[];
     try{
       if(Number(res.numericValue)>band+99)throw new Error('MemberIDの採番帯が上限に達しました: '+band+'〜'+(band+99));
-      const display=m.rows.filter(r=>id_(r.values[m.map.GroupID])===groupId).length+1;
+      // 02_Members.DisplayOrder is GLOBAL (existing members are ordered 1..33).
+      // 04_GroupMembers.DisplayOrder is scoped to each group independently.
+      const display=m.rows.reduce(function(max,r){
+        return Math.max(max,Number(r.values[m.map.DisplayOrder])||0);
+      },0)+1;
+      const groupDisplay=gm.rows.filter(function(r){
+        return id_(r.values[gm.map.GroupID])===groupId;
+      }).reduce(function(max,r){
+        return Math.max(max,Number(r.values[gm.map.DisplayOrder])||0);
+      },0)+1;
       const v=new Array(m.header.length).fill('');
       v[m.map.MemberID]=res.issuedId;v[m.map.GroupID]=groupId;v[m.map.DisplayName]=name;v[m.map.ColorHex]=color;v[m.map.DisplayOrder]=display;v[m.map.RecordStatus]='ACTIVE';
       rows.push({sheet:m.sheet,row:appendStyledRow_(m.sheet,v)});
       const mem=new Array(gm.header.length).fill('');
-      mem[gm.map.GroupID]=groupId;mem[gm.map.MemberID]=res.issuedId;mem[gm.map.DisplayOrder]=display;
+      mem[gm.map.GroupID]=groupId;mem[gm.map.MemberID]=res.issuedId;mem[gm.map.DisplayOrder]=groupDisplay;
       rows.push({sheet:gm.sheet,row:appendStyledRow_(gm.sheet,mem)});
       const profile=new Array(p.header.length).fill('');profile[p.map.MemberID]=res.issuedId;
       rows.push({sheet:p.sheet,row:appendStyledRow_(p.sheet,profile)});
