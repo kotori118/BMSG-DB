@@ -417,8 +417,7 @@ function restoreRetiredProfileFields() {
 function findMemberReferences_(ss, memberId) {
   const refs = [];
   [[BU1.SHEETS.GROUP_MEMBERS, 'MemberID'], [BU1.SHEETS.LYRICS_PARTS, 'Singer'],
-   [BU1.SHEETS.CARDS, 'MemberID'], [BU1.SHEETS.TRANSFERS, 'FromMemberID'],
-   [BU1.SHEETS.TRANSFERS, 'ToMemberID']].forEach(def => {
+   [BU1.SHEETS.CARDS, 'MemberID']].forEach(def => {
     const sheet = ss.getSheetByName(def[0]); if (!sheet) return;
     const table = readTable_(sheet); const col = table.map[def[1]]; if (col == null) return;
     const found = table.rows.some(r => def[1] === 'Singer'
