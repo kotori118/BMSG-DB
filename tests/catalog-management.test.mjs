@@ -42,9 +42,31 @@ test('record updates touch only requested columns, preserving unrelated formulas
   assert.doesNotMatch(catalog,/sheet\.getRange\(row\.rowNumber,1,1,after\.length\)\.setValues/);
 });
 
-test('songs are archived reversibly; released IDs are never deleted',()=>{
-  assert.match(catalog,/function setCatalogSongArchiveForUniverse/);
-  assert.match(catalog,/ARCHIVED/);
-  assert.match(catalog,/RecordStatus:target/);
-  assert.doesNotMatch(catalog,/deleteRow\(row\.rowNumber\)/);
+test('songs have a deletion preview and no archive or restore action',()=>{
+  assert.match(catalog,/function getCatalogSongDeletePreviewForUniverse/);
+  assert.match(catalog,/function deleteCatalogSongForUniverse/);
+  assert.match(catalog,/function catalogSongDeletePlan_/);
+  assert.doesNotMatch(catalog,/function setCatalogSongArchiveForUniverse/);
+  assert.doesNotMatch(catalog,/songs:\['RecordStatus'/);
+  assert.match(catalog,/SongType','SoloMemberID/);
+});
+
+test('permanent deletion requires typed confirmation, external review and backup',()=>{
+  assert.match(catalog,/UNIVERSE_CATALOG_SONG_DELETE_ENABLED/);
+  assert.match(catalog,/externalReferencesChecked!==true/);
+  assert.match(catalog,/confirmTitle/);
+  assert.match(catalog,/UNIVERSE_CATALOG_BACKUP_ID/);
+  assert.match(catalog,/catalogSongDeletePlan_\(ss,songId\)/);
+  assert.match(catalog,/!plan\.canDelete/);
+});
+
+test('deletion cleans direct children without shifting unrelated spreadsheet rows',()=>{
+  assert.match(catalog,/BU1\.SHEETS\.SONG_CREDITS/);
+  assert.match(catalog,/BU1\.SHEETS\.LYRICS_PARTS/);
+  assert.match(catalog,/BU1\.SHEETS\.METRICS/);
+  assert.match(catalog,/BU1\.SHEETS\.TRANSFERS/);
+  assert.match(catalog,/snap\.range\.clearContent\(\)/);
+  assert.match(catalog,/snap\.formulas\[i\]\|\|v/);
+  assert.match(catalog,/CATALOG_Audit/);
+  assert.match(catalog,/IDRegistry is intentionally retained/);
 });
