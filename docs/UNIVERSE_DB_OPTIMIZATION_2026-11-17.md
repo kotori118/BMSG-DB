@@ -1,7 +1,7 @@
 # BMSG Universe — DB最適化・サイト経由管理移行計画（開発版）
 
 状態：**設計＋開発ブランチ実装のみ**。本番DBの移行／シート保護／デプロイは未実施。
-対象：Core DB（25タブ）＋Log DB（22タブ）。サイト用共通Writerを唯一の更新入口にする。
+対象：Core DB（監査時25タブ、13削除後24タブ）＋Log DB（22タブ）。サイト用共通Writerを唯一の更新入口にする。
 正本：Google Driveの現行仕様書、PHASE 3デザイン仕様書、GAS一括実装仕様書。既存機能の動作優先。
 
 ## 絶対に守る不変条件
@@ -15,7 +15,7 @@
 7. 主体のコラボ相手（ATEEZ/SB19等）の独立アーティスト管理は行わない。ソロ曲だけSongType=SOLOとSoloMemberIDで識別する。
 8. データの手動一括修正や過去履歴破棄は不可。スキーマ追加はバックアップ＋明示承認後の段階的マイグレーションのみ。
 
-## Core DB 25タブの扱い
+## Core DBの扱い（監査時25タブ／現在24タブ）
 
 | タブ | 役割 | 方針 |
 | --- | --- | --- |
@@ -43,7 +43,7 @@
 | 削除予定_確認_カード同期 | 旧画像同期UI | 現行カード実装の参照を確認してから整理 |
 | 削除予定_06_MemberTags | 旧タグ表 | 現行プロフィール項目と差分を照合してから整理 |
 | 12_Videos | 映像出演分析・動画状態 | 既存機能・保存仕様維持 |
-| 13_VideoSegments | 出演区間 | 既存機能・保存仕様維持 |
+| 13_VideoSegments | 出演区間（旧予約領域） | **2026-11-17、ユーザー指示で削除済み。** データ0行。Core DB全体の別ファイルバックアップ取得・確認後に削除。再導入は別途設計が必要 |
 
 Log DB 22タブはUsers/IDRegistry/ProfileSettings/各サービスの操作ログを保持。
 **CATALOG_Auditだけ新規追加予定**。既存ログを上書きしない。
@@ -112,9 +112,17 @@ Log DB 22タブはUsers/IDRegistry/ProfileSettings/各サービスの操作ロ�
 
 ## まだやらないこと
 
-- Core DBへの直接の列追加、既存値の書き換え、入力・旧タブの削除
+- Core DBへの直接の列追加、既存値の書き換え、入力・旧タブの削除（ユーザーが明示指示した13_VideoSegmentsの削除のみ例外として実施済み）
 - 既存シートの行順並べ替え、歌詞・パフォーマンスの値の一括再構築
 - mainへのmerge、GASバージョン更新、公開サイトのデプロイ
 - サイト機能が不足している状態でのDB保護・編集権限の一括変更
 
 リンク: [Core DB](https://docs.google.com/spreadsheets/d/1-1AY6-BACOaGW3HIgYS0UjFMPSh-cjvYMMnJ_UYoRFY/edit) / [Log DB](https://docs.google.com/spreadsheets/d/10vDKc_Q431iMDTTqB2A16i-Yp28oXSInoKiJXZtonRQ/edit)
+
+## 13_VideoSegments 削除の実施記録
+
+- 実行日：2026-11-17。ユーザーの明示指示に基づき、Core DBの `13_VideoSegments`（sheetId=315003、ヘッダー以外のデータ0件）を削除。
+- 原本の全25タブを同じGoogle Drive内に `BMSG_Universe_DB_BACKUP_before_13_VideoSegments_delete_20261117` としてコピーし、25タブおよび元13のヘッダーを確認後に削除。
+- バックアップID：`1P9WmojQTZjHSgaiAZ7x0_QxKWmFWxAa12ixNiBoaOtw`。
+- 削除後はCore DBが24タブ、`12_Videos`・`10_PerformanceMetrics`・`06_Songs` の存在を確認。
+- コードの本番反映・サイトのデプロイは未実施。開発中の映像出演分析は今後独立した設計確認が必要。
