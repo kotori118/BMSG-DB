@@ -62,7 +62,7 @@ function getCatalogMaintenanceBootstrapForUniverse(payload){
   catalogRequireUser_(payload);const ss=openCoreSpreadsheet_(),schema=catalogSchemaStatus_(ss);
   function rows(name,key){const t=catalogTable_(ss,name,[key]);return t.rows.filter(function(r){return id_(r.values[t.map[key]]);}).map(function(r){return Object.assign(catalogRec_(t,r),{revision:catalogRowRevision_(t,r)});});}
   let fields=[];if(schema.ready)fields=pfMgmtBootstrapRows_(pfMgmtRequireShape_(ss));
-  return {ok:true,schema:schema,groups:rows(BU1.SHEETS.GROUPS,'GroupID'),guests:rows(BU1.SHEETS.GUESTS,'GuestID'),members:rows(BU1.SHEETS.MEMBERS,'MemberID'),images:rows(BU1.SHEETS.CARDS,'ImageID').filter(function(r){return String(r.TargetType).toLowerCase()==='member';}),fields:fields,backups:catalogBackupHistory_(),flags:catalogRuntimeFlags_()};
+  return {ok:true,schema:schema,groups:rows(BU1.SHEETS.GROUPS,'GroupID'),guests:rows(BU1.SHEETS.GUESTS,'GuestID'),members:rows(BU1.SHEETS.MEMBERS,'MemberID'),images:rows(BU1.SHEETS.CARDS,'ImageID').filter(function(r){return String(r.TargetType).toLowerCase()==='member';}),fields:fields,backups:catalogBackupHistory_()};
 }
 function maintainCatalogGuestForUniverse(payload){
   const actor=catalogRequireUser_(payload),id=id_(payload.guestId);
@@ -313,17 +313,6 @@ function restoreCatalogMasterDataForUniverse(payload){
       const restoredImages=plan.target.find(function(t){return t.name===BU1.SHEETS.CARDS;});const fileColumn=restoredImages.values[0].indexOf('DriveFileID');const fileIds=restoredImages.values.slice(1).map(function(row){return String(row[fileColumn]||'');}).filter(Boolean);
       catalogAudit_('DATABASE',entry.coreId,'RESTORE',plan.counts,{backupId:entry.coreId,restoredImageFileIds:fileIds},actor);return {ok:true,restoredTables:plan.target.length};
     }catch(error){try{catalogWriteMasterSnapshot_(plan.current);}catch(rollback){throw new Error(error.message+'／復旧失敗: '+rollback.message);}throw error;}
-  });
-}
-const CATALOG_RUNTIME_FLAGS_=Object.freeze(['UNIVERSE_SITE_ONLY_WRITES']);
-function catalogRuntimeFlags_(){const props=PropertiesService.getScriptProperties(),out={};CATALOG_RUNTIME_FLAGS_.forEach(function(k){out[k]=props.getProperty(k)==='true';});return out;}
-function configureCatalogRuntimeForUniverse(payload){
-  const actor=catalogRequireUser_(payload);
-  if(payload.confirm!=='CONFIGURE_MANAGEMENT'||!payload.flags||Object.keys(payload.flags).some(function(k){return !CATALOG_RUNTIME_FLAGS_.includes(k)||typeof payload.flags[k]!=='boolean';}))throw new Error('設定と実行確認を確認してください。');
-  return withSharedWriterLock_('管理機能の設定',function(){
-    const ss=openCoreSpreadsheet_();catalogRequireReady_(ss);pfMgmtBackupGate_();const props=PropertiesService.getScriptProperties(),before=catalogRuntimeFlags_();
-    try{Object.keys(payload.flags).forEach(function(k){props.setProperty(k,String(payload.flags[k]));});const after=catalogRuntimeFlags_();Object.keys(payload.flags).forEach(function(k){if(after[k]!==payload.flags[k])throw new Error('設定保存の照合に失敗しました。');});catalogAudit_('SETTINGS','MANAGEMENT','CONFIGURE',before,after,actor);return {ok:true,flags:after};}
-    catch(error){const failures=[];Object.keys(payload.flags).forEach(function(k){try{props.setProperty(k,String(before[k]));}catch(e){failures.push(e.message);}});throw new Error(error.message+(failures.length?'／設定復元失敗: '+failures.join(' / '):''));}
   });
 }
 /** Removed image files remain recoverable but must never be reattached by repair. */
