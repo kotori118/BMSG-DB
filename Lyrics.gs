@@ -98,6 +98,7 @@ function previewLyricsInput() {
   }
 }
 function commitLyricsInput() {
+  blockLegacySheetWrite_('旧歌詞登録');
   const input = requireSheet_(SpreadsheetApp.getActiveSpreadsheet(), BU1.SHEETS.INPUT_LYRICS);
   const saved = PropertiesService.getDocumentProperties().getProperty('BU_LYRICS_PREVIEW');
   if (!saved) { alert_('歌詞登録', '先に「歌詞｜解析（プレビュー）」を実行してください。'); return; }
