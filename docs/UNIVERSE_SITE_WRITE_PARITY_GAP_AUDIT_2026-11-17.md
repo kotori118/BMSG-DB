@@ -18,8 +18,8 @@
 | メンバー表示順変更 | 入力_プロフィールの行順 | 新サイト操作なし | **未実装** |
 | 未参照メンバー削除 | 入力_プロフィールの空欄による削除候補 | 新サイト操作なし | **未実装**。プロフィール、画像、歌詞、ログの参照検査 |
 | ユニット所属追加 | 入力_所属 | CatalogManagement → addCatalogUnitMemberForUniverse | 対応（開発版） |
-| ユニット所属解除 | 入力_所属から名前を消して同期 | 新サイト操作なし | **未実装、優先度高** |
-| ユニット内表示順変更 | 入力_所属の行順 | 新サイト操作なし | **未実装、優先度高** |
+| ユニット所属解除 | 入力_所属から名前を消して同期 | CatalogManagement → removeCatalogUnitMemberForUniverse | **開発版実装済み、実GAS試験待ち** |
+| ユニット内表示順変更 | 入力_所属の行順 | CatalogManagement → moveCatalogUnitMemberForUniverse | **開発版実装済み、実GAS試験待ち** |
 | 既存プロフィール値編集 | 入力_プロフィール | ProfileManagement → saveProfileManagementMember | 対応（既存サイト） |
 | プロフィール項目追加 | 入力_プロフィールの新列 / ProfileSettings | 新サイト操作なし | **未実装、最優先** |
 | プロフィール項目の非表示・再表示 | retireSelectedProfileField / restoreRetiredProfileFields | 新サイト操作なし | **未実装、最優先**。項目値を削除しない |
@@ -68,8 +68,17 @@
 - GASソース検査・Nodeテストの開発版検証を用意。Apps Script実DBでの操作・iPhone Safari・既存クイズ動作は未検証。
 - **本番未反映／旧シート未廃止／別の未完了操作は残存**。詳細：`docs/UNIVERSE_PROFILE_FIELD_MANAGEMENT_2026-11-17.md`。
 
+## P0-2 ユニット所属の追加・解除・表示順（2026-11-17追記）
+
+- 開発版に `CatalogUnitMembership.gs` とサイト側「ユニット管理」の所属一覧・上下移動・除外を追加。
+- GROUPは対象外。04_GroupMembersで選択ユニットの行と順序だけを更新し、02_Members.GroupID・プロフィール・他ユニットには触れない。
+- 古い画面の表示順、重複・欠番・不正な所属は更新拒否。変更後の照合と監査記録、失敗時の復旧処理を実装。
+- DB 46件・サイト 27件のNodeテストをすべて通過。**実Apps ScriptとiPhoneでの連携テストは未実施**。
+- 詳細：`docs/UNIVERSE_UNIT_MEMBERSHIP_SITE_MIGRATION_2026-11-17.md`。
+- `入力_所属`は依然として本番に存在し、旧Sheets同期処理の停止・バックアップ・本番切替が終わるまでは**削除禁止**。
+
 ## 作業境界と次のステップ
 
-- P0-1の開発版実装を追加済み。**次は P0-2「ユニット所属解除・表示順変更」**を開発版で対応する。
+- P0-1・P0-2の開発版実装とNode自動テストは完了。**次は独立したApps ScriptでCore/Logのコピーを使う実書き込み試験とスマホ検証**を行う。
 - 変更前にCore/LogコピーでID採番、列追加、保存失敗時の巻き戻し、非表示→再表示、Quizへの影響をテスト。
 - この監査はGitHub開発ブランチの文書のみ。**本番シート操作、main統合、GASデプロイは行わない**。
