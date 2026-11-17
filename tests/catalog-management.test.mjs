@@ -20,7 +20,7 @@ test('site writer keeps registry allocation and a lyricless opt-in',()=>{
   assert.match(writer,/reserveNumberForKey_\(ss, 'NEXT_SONG_ID_'/);
   assert.match(catalog,/createSongWithPartsCore_\(ss,song,credits,parts,\{/);
   assert.match(catalog,/allowEmptyParts:payload.includeLyrics!==true/);
-  assert.match(catalog,/saveCatalogSoloForUniverse/);
+  assert.doesNotMatch(catalog,/saveCatalogSoloForUniverse/);
 });
 
 test('catalog has explicit backup and schema gates',()=>{

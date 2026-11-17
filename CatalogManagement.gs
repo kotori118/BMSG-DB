@@ -105,7 +105,7 @@ function catalogSchemaStatus_(ss){
   defs.forEach(([name,headers])=>{
     const sheet=requireSheet_(ss,name);
     const present=sheet.getRange(1,1,1,Math.max(1,sheet.getLastColumn())).getDisplayValues()[0];
-    headers.filter(k=>present.indexOf(k)<0).forEach(k=>missing.push(name+'.'+k));
+    headers.filter(k=>present.indexOf(k)<0 && !(name===BU1.SHEETS.SONGS && present.includes('ArtistID'))).forEach(k=>missing.push(name+'.'+k));
   });
   const audit=SpreadsheetApp.openById(BU1.LOG_DB_ID).getSheetByName('CATALOG_Audit');
   if(!audit)missing.push('Log.CATALOG_Audit');
@@ -160,7 +160,7 @@ function migrateCatalogManagementSchemaForUniverse(payload){
       const sh=requireSheet_(ss,name);
       const h=sh.getRange(1,1,1,Math.max(sh.getLastColumn(),1)).getDisplayValues()[0];
       fields.forEach(field=>{
-        if(h.indexOf(field)>=0)return;
+        if(h.indexOf(field)>=0||(name===BU1.SHEETS.SONGS&&h.includes('ArtistID')))return;
         let col=sh.getLastColumn()+1;
         if(col>sh.getMaxColumns())sh.insertColumnAfter(sh.getMaxColumns());
         sh.getRange(1,col).setValue(field);
@@ -177,10 +177,10 @@ function migrateCatalogManagementSchemaForUniverse(payload){
       if(id_(r.values[m.map.MemberID])&&!clean_(r.values[m.map.RecordStatus]))
         m.sheet.getRange(r.rowNumber,m.map.RecordStatus+1).setValue('ACTIVE');
     });
-    const s=catalogTable_(ss,BU1.SHEETS.SONGS,['SongID','Title','Artist','SongType','SoloMemberID']);
+    const s=catalogTable_(ss,BU1.SHEETS.SONGS,['SongID','Title']);
     const ids={};
     m.rows.forEach(r=>{if(id_(r.values[m.map.MemberID]))ids[clean_(r.values[m.map.DisplayName])]=id_(r.values[m.map.MemberID]);});
-    s.rows.forEach(r=>{
+    if(s.map.ArtistID==null)s.rows.forEach(r=>{
       const sid=id_(r.values[s.map.SongID]);if(!sid)return;
       const solo=BU_CATALOG_SOLOS_[sid];
       const valid=solo&&clean_(r.values[s.map.Title])===solo.title&&clean_(r.values[s.map.Artist])==='BE:FIRST';
@@ -289,7 +289,7 @@ function updateCatalogGroupForUniverse(payload){
     const row=catalogRow_(t,'GroupID',gid),before=catalogRec_(t,row);
     const newName=catalogRequiredString_(payload.name||before.GroupName,'グループ名',100);
     const songs=readTable_(requireSheet_(ss,BU1.SHEETS.SONGS));
-    if(newName!==before.GroupName&&songs.rows.some(r=>clean_(r.values[songs.map.Artist])===before.GroupName))
+    if(songs.map.ArtistID==null&&newName!==before.GroupName&&songs.rows.some(r=>clean_(r.values[songs.map.Artist])===before.GroupName))
       throw new Error('曲のArtistに使用中のためグループ名は変更できません。');
     if(t.rows.some(r=>r!==row&&id_(r.values[t.map.GroupID])!==gid&&clean_(r.values[t.map.GroupName]).toLowerCase()===newName.toLowerCase()))throw new Error('同じ名前のグループが存在します。');
     const changes={GroupName:newName,ColorHex:catalogValidateChangedColor_(ss,payload.color||before.ColorHex,before.ColorHex,'GROUP',gid)};
@@ -378,28 +378,6 @@ function addCatalogUnitMemberForUniverse(payload){
       catalogAudit_('UNIT_MEMBERSHIP',groupId+'_'+memberId,'CREATE',null,{groupId,memberId},actor);
       return {ok:true,groupId,memberId};
     }catch(e){if(row)try{gm.sheet.deleteRow(row);}catch(ignore){}throw e;}
-  });
-}
-
-function saveCatalogSoloForUniverse(payload){
-  const actor=catalogRequireUser_(payload),songId=id_(payload.songId);
-  const songType=clean_(payload.songType||'NORMAL').toUpperCase();
-  if(['NORMAL','SOLO'].indexOf(songType)<0)throw new Error('NORMAL/SOLOのみ対応します。');
-  return withSharedWriterLock_('楽曲分類更新',function(){
-    const ss=openCoreSpreadsheet_();catalogRequireReady_(ss);
-    const t=catalogTable_(ss,BU1.SHEETS.SONGS,['SongID','Artist','SongType','SoloMemberID']);
-    const row=catalogRow_(t,'SongID',songId);
-    let mid='';
-    if(songType==='SOLO'){
-      if(clean_(row.values[t.map.Artist])!=='BE:FIRST')throw new Error('ソロ担当はBE:FIRST曲にのみ設定可能です。');
-      mid=id_(payload.soloMemberId);
-      const m=catalogTable_(ss,BU1.SHEETS.MEMBERS,['MemberID','GroupID','RecordStatus']);
-      const member=catalogRow_(m,'MemberID',mid);catalogEnsureActive_(m,member);
-      const groups=catalogTable_(ss,BU1.SHEETS.GROUPS,['GroupID','GroupName']);
-      const group=catalogRow_(groups,'GroupID',member.values[m.map.GroupID]);
-      if(clean_(group.values[groups.map.GroupName])!=='BE:FIRST')throw new Error('BE:FIRSTメンバーを選択してください。');
-    }
-    return catalogWriteRecord_(t,row,{SongType:songType,SoloMemberID:mid},'SONG','CLASSIFY',actor);
   });
 }
 
@@ -514,32 +492,21 @@ function createCatalogSongDraftForUniverse(payload){
   const actor=catalogRequireUser_(payload);
   const song=normalizeUniverseServiceSong_(payload.song||{});
   const credits=normalizeUniverseServiceCredits_(payload.credits||{});
-  const type=clean_(payload.songType||'NORMAL').toUpperCase();
-  if(['NORMAL','SOLO'].indexOf(type)<0)throw new Error('楽曲区分はNORMAL/SOLOのみです。');
-  return withSharedWriterLock_('歌詞なし新曲登録',function(){
+  return withSharedWriterLock_('新規楽曲登録',function(){
     const ss=openCoreSpreadsheet_();catalogRequireReady_(ss);
-    let solo='';
-    if(type==='SOLO'){
-      if(song.artist!=='BE:FIRST')throw new Error('ソロ曲はArtist=BE:FIRSTとして登録します。');
-      solo=id_(payload.soloMemberId);
-      const m=catalogTable_(ss,BU1.SHEETS.MEMBERS,['MemberID','GroupID','RecordStatus']);
-      const member=catalogRow_(m,'MemberID',solo);catalogEnsureActive_(m,member);
-      const groups=catalogTable_(ss,BU1.SHEETS.GROUPS,['GroupID','GroupName']);
-      const group=catalogRow_(groups,'GroupID',member.values[m.map.GroupID]);
-      if(clean_(group.values[groups.map.GroupName])!=='BE:FIRST')throw new Error('BE:FIRSTメンバー以外は指定できません。');
-    }
     let parts=[];
     if(payload.includeLyrics===true){
+      if(/^M\d+$/.test(song.artist))throw new Error('個人曲の歌詞は登録できません。');
       const parsed=parseSongLyricsForUniverse({userId:payload.userId,rawLyrics:payload.rawLyrics,ignoredGuestCandidates:payload.ignoredGuestCandidates});
       if(!parsed.canRegister||parsed.unknownGuests.length)throw new Error('歌詞を確認してください。未登録のSingerまたは解析エラーがあります。');
       parts=parsed.parts;
     }
     const result=createSongWithPartsCore_(ss,song,credits,parts,{
       source:'BMSG-DB_SITE_CATALOG',notePrefix:'サイト歌詞なし登録',
-      allowEmptyParts:payload.includeLyrics!==true,songType:type,soloMemberId:solo
+      allowEmptyParts:payload.includeLyrics!==true
     });
     if(result&&result.ok){
-      try{catalogAudit_('SONG',result.songId,payload.includeLyrics===true?'CREATE_WITH_LYRICS':'CREATE_NO_LYRICS',null,{title:song.title,artist:song.artist,songType:type,soloMemberId:solo},actor);}
+      try{catalogAudit_('SONG',result.songId,payload.includeLyrics===true?'CREATE_WITH_LYRICS':'CREATE_NO_LYRICS',null,{title:song.title,artist:song.artist},actor);}
       catch(e){throw new Error('楽曲は登録済みですが監査ログの保存に失敗しました（重複登録せず変更履歴を確認）: '+e.message);}
     }
     return result;

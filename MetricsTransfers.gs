@@ -27,7 +27,7 @@ function syncPerformanceMetricRows(optionalSs, silent) {
   blockLegacySheetWrite_('秒数表の旧全表同期');
   const ss = optionalSs && optionalSs.getSheets ? optionalSs : SpreadsheetApp.getActiveSpreadsheet();
   const sheet = requireSheet_(ss, BU1.SHEETS.METRICS), songs = readTable_(requireSheet_(ss, BU1.SHEETS.SONGS));
-  const target = songs.rows.filter(r => clean_(r.values[songs.map.Artist]) === 'BE:FIRST');
+  const target = songs.rows.filter(r => universeServiceBeFirst_(songs,r));
   const lastCol = Math.max(2, sheet.getLastColumn()), old = sheet.getRange(1, 1, Math.max(3, sheet.getLastRow()), lastCol).getValues(), byId = {};
   for (let r = 2; r < old.length; r++) if (id_(old[r][0])) byId[id_(old[r][0])] = old[r];
   const rows = target.map(r => { const sid = id_(r.values[songs.map.SongID]), prev = byId[sid] || []; const row = [sid].concat(prev.slice(1, lastCol)); while (row.length < lastCol) row.push(''); return row; });

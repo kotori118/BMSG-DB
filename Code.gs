@@ -69,7 +69,7 @@ function validateRequiredHeaders_(ss) {
   defs[BU1.SHEETS.GUESTS] = ['GuestID', 'DisplayName'];
   defs[BU1.SHEETS.GROUP_MEMBERS] = ['GroupID', 'MemberID', 'DisplayOrder'];
   defs[BU1.SHEETS.PROFILES] = ['MemberID'];
-  defs[BU1.SHEETS.SONGS] = ['SongID', 'Title', 'Artist', 'ReleaseDate', 'Form', 'CDTitle', 'IsTitleTrack'];
+  defs[BU1.SHEETS.SONGS] = ['SongID', 'Title', 'ArtistID', 'ReleaseDate', 'Form', 'CDTitle', 'IsTitleTrack'];
   defs[BU1.SHEETS.SONG_CREDITS] = ['SongID', 'Title', 'Lyricists', 'Composers', 'Choreographers'];
   defs[BU1.SHEETS.LYRICS_PARTS] = ['SongID', 'PartOrder', 'Singer', 'Lyrics'];
   defs[BU1.SHEETS.CARDS] = ['ImageID', 'MemberID', 'Rarity', 'DriveFileID', 'IsProfileMain'];
@@ -78,7 +78,7 @@ function validateRequiredHeaders_(ss) {
     const sheet = ss.getSheetByName(name);
     if (!sheet) return;
     const header = sheet.getRange(1, 1, 1, Math.max(1, sheet.getLastColumn())).getDisplayValues()[0];
-    defs[name].forEach(h => { if (header.indexOf(h) < 0) errors.push(name + ' に必須列「' + h + '」がありません'); });
+    defs[name].forEach(h => { if (header.indexOf(h) < 0 && !(name === BU1.SHEETS.SONGS && h === 'ArtistID' && header.includes('Artist'))) errors.push(name + ' に必須列「' + h + '」がありません'); });
   });
   return errors;
 }

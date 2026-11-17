@@ -45,7 +45,7 @@ function buildMembershipPlan_(ss) {
   groupsDb.rows.forEach(r => {
     const gid = id_(r.values[groupsDb.map.GroupID]); if (!gid || desiredIds[gid]) return;
     const name = clean_(r.values[groupsDb.map.GroupName]);
-    if (songs.rows.some(s => clean_(s.values[songs.map.Artist]) === name)) errors.push('グループ「' + name + '」は06_Songsで使用中のため削除できません');
+    if (songs.rows.some(s => universeServiceStoredArtist_(songs,s) === (songs.map.ArtistID == null ? name : gid))) errors.push('グループ「' + name + '」は06_Songsで使用中のため削除できません');
   });
   return { groups: groups, memberships: memberships, newGroups: newGroups, errors: errors };
 }

@@ -12,7 +12,7 @@ function auditCatalogDatabaseForUniverse(payload) {
   const members=catalogTable_(ss,BU1.SHEETS.MEMBERS,['MemberID','GroupID','DisplayName']);
   const links=catalogTable_(ss,BU1.SHEETS.GROUP_MEMBERS,['GroupID','MemberID']);
   const profiles=catalogTable_(ss,BU1.SHEETS.PROFILES,['MemberID']);
-  const songs=catalogTable_(ss,BU1.SHEETS.SONGS,['SongID','Title','Artist']);
+  const songs=catalogTable_(ss,BU1.SHEETS.SONGS,['SongID','Title']);
   const credits=catalogTable_(ss,BU1.SHEETS.SONG_CREDITS,['SongID','Title']);
   const lyrics=catalogTable_(ss,BU1.SHEETS.LYRICS_PARTS,['SongID','PartOrder']);
   const metrics=catalogTable_(ss,BU1.SHEETS.METRICS,['SongID']);
@@ -62,8 +62,8 @@ function auditCatalogDatabaseForUniverse(payload) {
     .concat(members.rows.map(function(r){return clean_(r.values[members.map.DisplayName]);})).concat(['UNIT'])
   );
   nonemptySongs.forEach(function(r) {
-    const sid=id_(r.values[songs.map.SongID]),artist=clean_(r.values[songs.map.Artist]);
-    if(!knownNames.has(artist))warn('UNKNOWN_ARTIST','06_Songs '+sid+' Artist '+artist+' が管理マスターにない');
+    const sid=id_(r.values[songs.map.SongID]),artist=universeServiceStoredArtist_(songs,r);
+    if(artist && (songs.map.ArtistID==null?!knownNames.has(artist):!has(groupIds,artist)&&!has(memberIds,artist)))warn('UNKNOWN_ARTIST','06_Songs '+sid+' Artist '+artist+' が管理マスターにない');
   });
   const childStats={credits:0,lyrics:0,metrics:0};
   const seenCredit=new Set(),seenMetrics=new Set(),seenParts=new Set();
@@ -95,7 +95,7 @@ function auditCatalogDatabaseForUniverse(payload) {
   });
   nonemptySongs.forEach(function(r) {
     const sid=id_(r.values[songs.map.SongID]);
-    if(clean_(r.values[songs.map.Artist])==='BE:FIRST'&&!seenMetrics.has(sid))
+    if(universeServiceBeFirst_(songs,r)&&!seenMetrics.has(sid))
       warn('MISSING_METRICS','BE:FIRST '+sid+' の秒数行がない');
   });
   const tabs=ss.getSheets().map(function(sh) {
