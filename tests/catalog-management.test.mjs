@@ -110,9 +110,14 @@ test('retired sheet-entry routes are always blocked',()=>{
   }
 });
 
-test('identifier allocation stays within the owning artist/member band',()=>{
+test('SongID keeps legacy band; G/U and M use unbounded shared/global issuers',()=>{
+  const code=fs.readFileSync(path.join(root,'Code.gs'),'utf8');
   assert.match(writer,/Number\(reservation\.numericValue\)>band\+999/);
-  assert.match(catalog,/Number\(res\.numericValue\)>band\+99/);
+  assert.match(code,/NEXT_GROUP_ID_GROUP/);
+  assert.match(code,/NEXT_GROUP_ID_UNIT/);
+  assert.match(code,/NEXT_MEMBER_ID_GLOBAL/);
+  assert.match(catalog,/NEXT_MEMBER_ID_GLOBAL/);
+  assert.doesNotMatch(catalog,/MemberIDの採番帯が上限/);
 });
 test('schema installation checks existing catalog audit table headers before mutation',()=>{
   assert.match(catalog,/existingAudit/);

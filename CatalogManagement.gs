@@ -7,11 +7,10 @@
  * Migration is an explicit user-confirmed action and does not run at startup.
  */
 const BU_CATALOG_SCHEMA_ = Object.freeze({
-  groups:['GroupKind','RecordStatus'],
+  groups:['RecordStatus'],
   members:['RecordStatus'],
   songs:['SongType','SoloMemberID']
 });
-const BU_CATALOG_MAIN_GROUP_NAMES_ = Object.freeze(['BE:FIRST','MAZZEL','STARGLOW','HANA','ShowMinorSavage']);
 const BU_CATALOG_SOLOS_ = Object.freeze({
   '1068':{title:'Want it',member:'SHUNTO'},
   '1069':{title:'Rain on me',member:'MANATO'},
@@ -168,12 +167,10 @@ function migrateCatalogManagementSchemaForUniverse(payload){
         h[col-1]=field;
       });
     });
-    const g=catalogTable_(ss,BU1.SHEETS.GROUPS,['GroupID','GroupName','GroupKind','RecordStatus']);
+    const g=catalogTable_(ss,BU1.SHEETS.GROUPS,['GroupID','GroupName','RecordStatus']);
     g.rows.forEach(r=>{
-      if(!id_(r.values[g.map.GroupID]))return;
-      if(!clean_(r.values[g.map.GroupKind]))
-        g.sheet.getRange(r.rowNumber,g.map.GroupKind+1).setValue(BU_CATALOG_MAIN_GROUP_NAMES_.indexOf(clean_(r.values[g.map.GroupName]))>=0?'GROUP':'UNIT');
-      if(!clean_(r.values[g.map.RecordStatus]))g.sheet.getRange(r.rowNumber,g.map.RecordStatus+1).setValue('ACTIVE');
+      if(id_(r.values[g.map.GroupID])&&!clean_(r.values[g.map.RecordStatus]))
+        g.sheet.getRange(r.rowNumber,g.map.RecordStatus+1).setValue('ACTIVE');
     });
     const m=catalogTable_(ss,BU1.SHEETS.MEMBERS,['MemberID','DisplayName','RecordStatus']);
     m.rows.forEach(r=>{
@@ -260,16 +257,16 @@ function createCatalogGroupForUniverse(payload){
   const color=normalizeHex_(payload.color||'#777777');
   return withSharedWriterLock_('グループ作成',function(){
     const ss=openCoreSpreadsheet_();catalogRequireReady_(ss);
-    const t=catalogTable_(ss,BU1.SHEETS.GROUPS,['GroupID','GroupName','ColorHex','DisplayOrder','GroupKind','RecordStatus']);
+    const t=catalogTable_(ss,BU1.SHEETS.GROUPS,['GroupID','GroupName','ColorHex','DisplayOrder','RecordStatus']);
     if(t.rows.some(r=>clean_(r.values[t.map.GroupName]).toLowerCase()===name.toLowerCase()))throw new Error('同名グループが既に存在します。');
     catalogRequireUniqueColor_(ss,color,'GROUP','');
-    const reservation=reserveNumberForKey_(ss,'NEXT_GROUP_ID','BMSG-DB_SITE_CATALOG','サイトでGroup作成: '+name);
+    const reservation=reserveNumberForKey_(ss,'NEXT_GROUP_ID_'+kind,'BMSG-DB_SITE_CATALOG','サイトでGroup作成: '+name);
     let row=0;
     try{
       const vals=new Array(t.header.length).fill('');
       vals[t.map.GroupID]=reservation.issuedId;vals[t.map.GroupName]=name;vals[t.map.ColorHex]=color;
       vals[t.map.DisplayOrder]=t.rows.reduce((n,r)=>Math.max(n,Number(r.values[t.map.DisplayOrder])||0),0)+1;
-      vals[t.map.GroupKind]=kind;vals[t.map.RecordStatus]='ACTIVE';
+      vals[t.map.RecordStatus]='ACTIVE';
       row=appendStyledRow_(t.sheet,vals);
       SpreadsheetApp.flush();
       if(id_(t.sheet.getRange(row,t.map.GroupID+1).getValue())!==reservation.issuedId)throw new Error('保存確認に失敗しました。');
@@ -288,7 +285,7 @@ function updateCatalogGroupForUniverse(payload){
   const actor=catalogRequireUser_(payload),gid=id_(payload.groupId);
   return withSharedWriterLock_('グループ編集',function(){
     const ss=openCoreSpreadsheet_();catalogRequireReady_(ss);
-    const t=catalogTable_(ss,BU1.SHEETS.GROUPS,['GroupID','GroupName','ColorHex','GroupKind','RecordStatus']);
+    const t=catalogTable_(ss,BU1.SHEETS.GROUPS,['GroupID','GroupName','ColorHex','RecordStatus']);
     const row=catalogRow_(t,'GroupID',gid),before=catalogRec_(t,row);
     const newName=catalogRequiredString_(payload.name||before.GroupName,'グループ名',100);
     const songs=readTable_(requireSheet_(ss,BU1.SHEETS.SONGS));
@@ -305,20 +302,17 @@ function createCatalogMemberForUniverse(payload){
   const groupId=id_(payload.primaryGroupId),color=normalizeHex_(payload.color||'#777777');
   return withSharedWriterLock_('メンバー作成',function(){
     const ss=openCoreSpreadsheet_();catalogRequireReady_(ss);
-    const g=catalogTable_(ss,BU1.SHEETS.GROUPS,['GroupID','GroupName','GroupKind','RecordStatus']);
+    const g=catalogTable_(ss,BU1.SHEETS.GROUPS,['GroupID','GroupName','RecordStatus']);
     const grp=catalogRow_(g,'GroupID',groupId);catalogEnsureActive_(g,grp);
-    if(clean_(grp.values[g.map.GroupKind])!=='GROUP')throw new Error('主所属にはGROUPを指定してください。ユニットへの参加は所属管理から追加します。');
+    if(!groupId.startsWith('G'))throw new Error('主所属にはGROUPを指定してください。ユニットへの参加は所属管理から追加します。');
     const m=catalogTable_(ss,BU1.SHEETS.MEMBERS,['MemberID','GroupID','DisplayName','ColorHex','DisplayOrder','RecordStatus']);
     if(m.rows.some(r=>clean_(r.values[m.map.DisplayName]).toLowerCase()===name.toLowerCase()))throw new Error('同名メンバーが登録済みです。');
     catalogRequireUniqueColor_(ss,color,'MEMBER','');
     const gm=catalogTable_(ss,BU1.SHEETS.GROUP_MEMBERS,['GroupID','MemberID','DisplayOrder']);
     const p=catalogTable_(ss,BU1.SHEETS.PROFILES,['MemberID']);
-    const groupName=clean_(grp.values[g.map.GroupName]);
-    const band=BU1.MAIN_GROUP_BANDS[groupName]||BU1.MAIN_GROUP_BANDS['ソロ・その他'];
-    const res=reserveNumberForKey_(ss,'NEXT_MEMBER_ID_'+band,'BMSG-DB_SITE_CATALOG','サイトでMember作成: '+name);
+    const res=reserveNumberForKey_(ss,'NEXT_MEMBER_ID_GLOBAL','BMSG-DB_SITE_CATALOG','サイトでMember作成: '+name);
     const rows=[];
     try{
-      if(Number(res.numericValue)>band+99)throw new Error('MemberIDの採番帯が上限に達しました: '+band+'〜'+(band+99));
       // 02_Members.DisplayOrder is GLOBAL (existing members are ordered 1..33).
       // 04_GroupMembers.DisplayOrder is scoped to each group independently.
       const display=m.rows.reduce(function(max,r){
@@ -366,9 +360,9 @@ function addCatalogUnitMemberForUniverse(payload){
   const actor=catalogRequireUser_(payload),groupId=id_(payload.groupId),memberId=id_(payload.memberId);
   return withSharedWriterLock_('ユニット所属追加',function(){
     const ss=openCoreSpreadsheet_();catalogRequireReady_(ss);
-    const groups=catalogTable_(ss,BU1.SHEETS.GROUPS,['GroupID','GroupKind','RecordStatus']);
+    const groups=catalogTable_(ss,BU1.SHEETS.GROUPS,['GroupID','RecordStatus']);
     const g=catalogRow_(groups,'GroupID',groupId);catalogEnsureActive_(groups,g);
-    if(clean_(g.values[groups.map.GroupKind])!=='UNIT')throw new Error('所属追加先はUNITのみ選択してください。');
+    if(!groupId.startsWith('U'))throw new Error('所属追加先はUNITのみ選択してください。');
     const members=catalogTable_(ss,BU1.SHEETS.MEMBERS,['MemberID','RecordStatus']);
     catalogEnsureActive_(members,catalogRow_(members,'MemberID',memberId));
     const gm=catalogTable_(ss,BU1.SHEETS.GROUP_MEMBERS,['GroupID','MemberID','DisplayOrder']);

@@ -42,9 +42,7 @@ function syncCardsOnAccess_() {
       if (matches.length !== 1) { console.warn('カード名を特定不能: ' + file.getName()); continue; }
       const memberRow = matches[0];
       const memberId = id_(memberRow.values[members.map.MemberID]);
-      const expectedGroup = /^5/.test(memberId)
-        ? 'BMSG POSSE'
-        : (groupNameById[id_(memberRow.values[members.map.GroupID])] || '');
+      const expectedGroup = groupNameById[id_(memberRow.values[members.map.GroupID])] || 'BMSG POSSE';
       if (clean_(m[3]) !== expectedGroup) { console.warn('カードのグループ表記が不一致: ' + file.getName()); continue; }
       const key = memberId + '|' + m[1].toUpperCase();
       if (!filesByKey[key]) filesByKey[key] = [];
@@ -52,13 +50,12 @@ function syncCardsOnAccess_() {
     }
 
     const images = readTable_(requireSheet_(ss, BU1.SHEETS.CARDS));
-    requireColumns_(images, ['ImageID', 'TargetType', 'TargetID', 'Rarity', 'DriveFileID', 'DisplayOrder', 'IsProfileMain']);
+    requireColumns_(images, ['ImageID', 'MemberID', 'Rarity', 'DriveFileID', 'IsProfileMain']);
     let updated = 0, warnings = 0;
     images.rows.forEach(r => {
-      if (clean_(r.values[images.map.TargetType]).toLowerCase() !== 'member') return;
       const rarity = clean_(r.values[images.map.Rarity]).toUpperCase();
       if (BU1.CARD_RARITIES.indexOf(rarity) < 0) return;
-      const key = id_(r.values[images.map.TargetID]) + '|' + rarity;
+      const key = id_(r.values[images.map.MemberID]) + '|' + rarity;
       const ids = filesByKey[key] || [];
       const current = clean_(r.values[images.map.DriveFileID]);
       let next = current;
