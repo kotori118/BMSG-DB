@@ -1,6 +1,6 @@
-# Universe 47-tab structural audit — 2026-11-17
+# Universe DB structural audit — 2026-11-17 (47-tab baseline / 46-tab current)
 
-Scope: Core DB 25 tabs, Log DB 22 tabs. Read-only inspection of tab metadata and header rows, plus static reference scan of BMSG-DB and BMSG-PJ development branches. No production changes or deployment. Static reference absence does NOT establish that deleting a tab is safe.
+Original audit scope: Core DB 25 tabs, Log DB 22 tabs. On explicit user request, the empty 13_VideoSegments tab was subsequently deleted from the Core DB after backup; current Core=24 and Log=22. Static reference absence does NOT establish that deletion is safe in general. No deployment occurred.
 
 ## Core DB (25/25)
 | Tab | Disposition | Reason |
@@ -29,9 +29,9 @@ Scope: Core DB 25 tabs, Log DB 22 tabs. Read-only inspection of tab metadata and
 | 削除予定_確認_カード同期 | REVIEW | Legacy card sync screen, 3 explanatory rows |
 | 削除予定_06_MemberTags | REVIEW | Historical tags, 92 first-column records |
 | 12_Videos | KEEP pending implementation review | 83 video records; direct references not detected in two scanned repos |
-| 13_VideoSegments | KEEP pending implementation review | Header only; planned video segment storage |
+| 13_VideoSegments | **DELETED 2026-11-17 at user request** | Header-only (0 data rows); no direct BMSG-PJ/BMSG-DB code references found. Backup: 1P9WmojQTZjHSgaiAZ7x0_QxKWmFWxAa12ixNiBoaOtw |
 
-Core categories: 12 operational KEEP, 1 history KEEP, 4 site-parity sunset, 1 retired-after-cutover, 6 REVIEW, 1 retire candidate = 25.
+Core baseline categories: 12 operational KEEP, 1 history KEEP, 4 site-parity sunset, 1 retired-after-cutover, 6 REVIEW, 1 retire candidate = 25. **Current Core=24** after deleting 13_VideoSegments; all other sheets preserved.
 
 ## Log DB (22/22)
 | Tabs | Disposition | Code or purpose |
@@ -49,12 +49,12 @@ Core categories: 12 operational KEEP, 1 history KEEP, 4 site-parity sunset, 1 re
 21 Log tabs remain operational or historical; Topics requires further checks. Empty game room tables remain because code uses them.
 
 ## Dependencies and safety
-- 10_PerformanceMetrics is used by site AnalysisApi.gs and PerformanceTimerApi.gs, and DB song-creation metrics initialization. Preserve two-row header.
+- 10_PerformanceMetrics is used by site AnalysisApi.gs and PerformanceTimerApi.gs, and DB song-creation metrics initialization. Preserve two-row header. Confirmed still present after deleting 13_VideoSegments.
 - 08_LyricsParts drives song lyrics, first/last singer, singer sequence, karaoke, quiz and cover. Never conflate with retired 11_PartTransfers.
 - 11_PartTransfers was disconnected only in development branches. Production site and DB library are still old; **do not delete the live sheet first**. Back up, deploy compatible code when separately authorized, test, then delete.
 - 07_SongCredits.Title is redundant but remains for compatibility until all readers are migrated.
 - Hidden profile tables contain historical data: do full field-by-field reconciliation with 05_Profiles and Log ProfileSettings before any deletion.
-- 12_Videos and 13_VideoSegments were not directly referenced by scanned BMSG-DB/BMSG-PJ code. Confirm planned video-analysis implementation and any external code before migration.
+- 12_Videos remains with 83 existing video records. 13_VideoSegments was removed on explicit instruction after backing up the entire workbook. Any future segment analysis must introduce a new, user-approved storage design; existing video master must not be disturbed.
 - Check external Google Sheet formulas, YouTube analytics and setlists before schema or deletion changes.
 
 ## Next work item: site capability gap audit
