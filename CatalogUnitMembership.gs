@@ -7,10 +7,10 @@
  * No row is physically deleted: shifting rows could invalidate other references.
  */
 function catalogUnitMembershipContext_(ss,groupId) {
-  const groups=catalogTable_(ss,BU1.SHEETS.GROUPS,['GroupID','GroupKind','RecordStatus']);
+  const groups=catalogTable_(ss,BU1.SHEETS.GROUPS,['GroupID','RecordStatus']);
   const group=catalogRow_(groups,'GroupID',groupId);
   catalogEnsureActive_(groups,group);
-  if(clean_(group.values[groups.map.GroupKind])!=='UNIT')
+  if(!groupId.startsWith('U'))
     throw new Error('所属の除外・並べ替えはユニットでのみ実行できます。');
   const links=catalogTable_(ss,BU1.SHEETS.GROUP_MEMBERS,['GroupID','MemberID','DisplayOrder']);
   const selected=links.rows.filter(function(r){
