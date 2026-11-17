@@ -70,3 +70,14 @@ test('deletion cleans direct children without shifting unrelated spreadsheet row
   assert.match(catalog,/CATALOG_Audit/);
   assert.match(catalog,/IDRegistry is intentionally retained/);
 });
+
+test('new BE:FIRST song creates only its missing performance-metrics row',()=>{
+  const metrics=fs.readFileSync(path.join(root,'MetricsTransfers.gs'),'utf8');
+  const create=writer.slice(writer.indexOf('function createSongWithPartsCore_'),writer.indexOf('function replaceSongPartsCore_'));
+  assert.match(metrics,/function ensurePerformanceMetricRowForSong_\(ss, songId\)/);
+  assert.match(metrics,/if\(found\.length===1\)return \{created:false/);
+  assert.match(metrics,/appendStyledRow_\(sheet,vals\)/);
+  assert.match(create,/ensurePerformanceMetricRowForSong_\(ss,reservation\.issuedId\)/);
+  assert.match(create,/rollback\.push\(\{sheet:metric\.sheet,row:metric\.row\}\)/);
+  assert.doesNotMatch(create,/syncPerformanceMetricRows\(ss, true\)/);
+});
