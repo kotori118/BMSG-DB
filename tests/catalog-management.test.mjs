@@ -25,8 +25,8 @@ test('catalog is opt-in and rejects anonymous/unapproved users',()=>{
 test('site writer keeps registry allocation and a lyricless opt-in',()=>{
   assert.match(writer,/if \(!parts\.length && !context\.allowEmptyParts\)/);
   assert.match(writer,/reserveNumberForKey_\(ss, 'NEXT_SONG_ID_'/);
-  assert.match(catalog,/createSongWithPartsCore_\(ss,song,credits,\[\],\{/);
-  assert.match(catalog,/allowEmptyParts:true/);
+  assert.match(catalog,/createSongWithPartsCore_\(ss,song,credits,parts,\{/);
+  assert.match(catalog,/allowEmptyParts:payload.includeLyrics!==true/);
   assert.match(catalog,/saveCatalogSoloForUniverse/);
 });
 

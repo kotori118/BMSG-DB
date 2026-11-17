@@ -544,12 +544,18 @@ function createCatalogSongDraftForUniverse(payload){
       const group=catalogRow_(groups,'GroupID',member.values[m.map.GroupID]);
       if(clean_(group.values[groups.map.GroupName])!=='BE:FIRST')throw new Error('BE:FIRSTメンバー以外は指定できません。');
     }
-    const result=createSongWithPartsCore_(ss,song,credits,[],{
+    let parts=[];
+    if(payload.includeLyrics===true){
+      const parsed=parseSongLyricsForUniverse({userId:payload.userId,rawLyrics:payload.rawLyrics,ignoredGuestCandidates:payload.ignoredGuestCandidates});
+      if(!parsed.canRegister||parsed.unknownGuests.length)throw new Error('歌詞を確認してください。未登録のSingerまたは解析エラーがあります。');
+      parts=parsed.parts;
+    }
+    const result=createSongWithPartsCore_(ss,song,credits,parts,{
       source:'BMSG-DB_SITE_CATALOG',notePrefix:'サイト歌詞なし登録',
-      allowEmptyParts:true,songType:type,soloMemberId:solo
+      allowEmptyParts:payload.includeLyrics!==true,songType:type,soloMemberId:solo
     });
     if(result&&result.ok){
-      try{catalogAudit_('SONG',result.songId,'CREATE_NO_LYRICS',null,{title:song.title,artist:song.artist,songType:type,soloMemberId:solo},actor);}
+      try{catalogAudit_('SONG',result.songId,payload.includeLyrics===true?'CREATE_WITH_LYRICS':'CREATE_NO_LYRICS',null,{title:song.title,artist:song.artist,songType:type,soloMemberId:solo},actor);}
       catch(e){throw new Error('楽曲は登録済みですが監査ログの保存に失敗しました（重複登録せず管理者へ連絡）: '+e.message);}
     }
     return result;
