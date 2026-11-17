@@ -93,7 +93,11 @@ function changeCatalogMemberPrimaryGroupForUniverse(payload) {
       // points to a group without a corresponding membership.
       if(!newLinks.length && oldLinks.length){
         const cell=sh.getRange(oldLinks[0].rowNumber,links.map.GroupID+1);
+        const nextOrder=1+links.rows.filter(function(r){
+          return id_(r.values[links.map.GroupID])===gid;
+        }).reduce(function(n,r){return Math.max(n,Number(r.values[links.map.DisplayOrder])||0);},0);
         memberMaintenanceCellWrite_(cell,gid,undo);
+        memberMaintenanceCellWrite_(sh.getRange(oldLinks[0].rowNumber,links.map.DisplayOrder+1),nextOrder,undo);
       }else if(!newLinks.length){
         const values=new Array(links.header.length).fill('');
         values[links.map.GroupID]=gid;
