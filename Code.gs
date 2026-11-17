@@ -16,7 +16,7 @@ const BU1 = Object.freeze({
     GUESTS: '03_Guests', GROUP_MEMBERS: '04_GroupMembers',
     PROFILES: '05_Profiles', SONGS: '06_Songs', SONG_CREDITS: '07_SongCredits',
     LYRICS_PARTS: '08_LyricsParts', CARDS: '09_Images',
-    METRICS: '10_PerformanceMetrics', TRANSFERS: '11_PartTransfers',
+    METRICS: '10_PerformanceMetrics',
   }),
   COLORS: Object.freeze({ INPUT: '#FFF9D6', AUTO: '#EFEFEF', ERROR: '#F4CCCC' }),
   CARD_RARITIES: Object.freeze(['SSR', 'SR', 'R', 'N']),
@@ -89,7 +89,6 @@ function validateRequiredHeaders_(ss) {
   defs[BU1.SHEETS.SONG_CREDITS] = ['SongID', 'Title', 'Lyricists', 'Composers', 'Choreographers'];
   defs[BU1.SHEETS.LYRICS_PARTS] = ['SongID', 'PartOrder', 'Singer', 'Lyrics'];
   defs[BU1.SHEETS.CARDS] = ['ImageID', 'TargetType', 'TargetID', 'Rarity', 'DriveFileID', 'DisplayOrder', 'IsProfileMain'];
-  defs[BU1.SHEETS.TRANSFERS] = ['TransferID', 'SongID', 'PartOrder', 'FromMemberID', 'ToMemberID', 'TransferGroup'];
   const errors = [];
   Object.keys(defs).forEach(name => {
     const sheet = ss.getSheetByName(name);
@@ -103,7 +102,7 @@ function validateRequiredHeaders_(ss) {
 function validateUniqueIds_(ss) {
   const targets = [[BU1.SHEETS.GROUPS, 'GroupID'], [BU1.SHEETS.MEMBERS, 'MemberID'],
     [BU1.SHEETS.GUESTS, 'GuestID'], [BU1.SHEETS.SONGS, 'SongID'],
-    [BU1.SHEETS.CARDS, 'ImageID'], [BU1.SHEETS.TRANSFERS, 'TransferID']];
+    [BU1.SHEETS.CARDS, 'ImageID']];
   const errors = [];
   targets.forEach(t => {
     const table = readTable_(requireSheet_(ss, t[0]));
@@ -224,7 +223,6 @@ function resolveIssueSpec_(ss, key) {
     return { entity:'PROFILE', scope:'GLOBAL', liveMax:maxProfileNumber_(ss), formatter:function(n){ return 'P' + padNumber_(n, 3); } };
   }
   if (key === 'NEXT_IMAGE_ID') throw new Error('ImageIDはBMSG-PJの画像管理だけが発行します。');
-  if (key === 'NEXT_TRANSFER_ID') throw new Error('11_PartTransfersは完全手動管理です。TransferIDは自動採番しません。');
   throw new Error('未対応の採番キーです: ' + key);
 }
 
