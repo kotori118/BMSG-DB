@@ -33,7 +33,7 @@
 | 08_LyricsParts | 歌詞と歌唱者 | 4列の現行仕様とハモリsuffixを維持。歌詞なし新曲を許可 |
 | 09_Images | アートワーク／カード画像 | 既存サイト画像管理から編集 |
 | 10_PerformanceMetrics | BE:FIRST秒数分析 | 2行ヘッダーを維持。新曲は新規1行のみ追加（開発版で修正） |
-| 11_PartTransfers | 歌唱パート移行 | 現状Sheets専用の管理作業あり。サイトCRUD追加後に旧ルート停止 |
+| 11_PartTransfers | 旧パート移行履歴 | **廃止確定**。現行サイトの参照撤去後に本番DBのバックアップを取得してシート削除。復元可否の確認前に物理削除しない |
 | 移行_旧ID対応 | 正規化前のID対応履歴 | 履歴として保存。削除不可 |
 | 削除予定_06_MemberProfileValues_NEW | 過去のプロフィール検討 | 現行05_Profilesと照合後に整理判断 |
 | 削除予定_05_ProfileFields_NEW | 過去のプロフィール検討 | 上に同じ |
@@ -73,7 +73,7 @@ Log DB 22タブはUsers/IDRegistry/ProfileSettings/各サービスの操作ロ�
 - 06_SongsのSongID重複：なし。
 - 04_GroupMembersの所属重複／不明GroupID・MemberID：なし。
 - 07_SongCreditsの存在しないSongID参照・曲名不一致：なし。
-- 08_LyricsParts、10_PerformanceMetrics、11_PartTransfersの存在しないSongID参照：なし。
+- 08_LyricsParts、10_PerformanceMetrics、11_PartTransfersの存在しないSongID参照：なし（11撤去前の監査記録として保存）。
 - BE:FIRST曲の10_PerformanceMetrics行の欠落：なし。
 - 10_PerformanceMetricsの同一SongID重複：なし。
 
@@ -81,11 +81,21 @@ Log DB 22タブはUsers/IDRegistry/ProfileSettings/各サービスの操作ロ�
 
 ## サイト管理への切替スイッチ（開発ブランチで用意済み）
 
-`UNIVERSE_SITE_ONLY_WRITES=true` のとき、旧Sheetsメニューからの書き込み操作を非表示にし、旧プロフィール・所属・Guest／楽曲・歌詞・秒数表再同期・カード修復・パート移行削除のGAS経路を拒否する。**初期値はOFF**。
+`UNIVERSE_SITE_ONLY_WRITES=true` のとき、旧Sheetsメニューからの書き込み操作を非表示にし、旧プロフィール・所属・Guest／楽曲・歌詞・秒数表再同期・カード修復のGAS経路を拒否する。**初期値はOFF**。
 
 このスイッチだけでは編集権限を持つ利用者の直接セル編集を禁止できない。Sheetsの権限変更とGAS実行主体を別途実証すること。
 
 新規のGroup/Member/Songの採番では、各Band上限を超えた番号は発行確定せず失敗として扱う。IDRegistryと元のデータを維持。
+
+## 2026-11-17 追加変更：11_PartTransfersの廃止（10は存続）
+
+ユーザー指定による正式方針：
+- **10_PerformanceMetricsは維持**。歌唱・センター秒数のANALYSIS、SETTINGSの歌唱・ダンス秒数計測、GAS共通Writerの秒数行追加を維持する。
+- **11_PartTransfersを廃止**。ANALYSIS > その他 > パート継承分析、パート継承のランキング、パート移行シートの確認・削除操作、Member参照確認、曲削除時の関連子行、DB診断から依存を除去する。
+- **08_LyricsPartsは維持**。歌割り情報／歌い出し・歌い終わり／フレーズ／順番・掛け合いは引き続き使用。
+- GitHubの開発ブランチに変更し、本番DBの11シートは現行公開サイトの依存を避けるため **まだ削除しない**。本番用のサイト・DBライブラリの対応リリース、参照0件確認、バックアップ検証後に別工程で物理削除する。
+- 旧TransferIDのIDRegistry記録があれば過去履歴として保持するが、発行・更新は行わない。
+- 新しい歌詞パート移行機能はこの改修で追加しない。
 
 ## 本番移行の前提条件
 
@@ -93,7 +103,7 @@ Log DB 22タブはUsers/IDRegistry/ProfileSettings/各サービスの操作ロ�
 - [ ] Core／Logの**別ファイル**バックアップを取得、コピーを開けることを確認
 - [ ] テスト用複製DBでスキーマ変更／ロールバック／本番と同等データのCRUD検証
 - [ ] 管理者の実行権限とDBの直接編集禁止を両立するApps Scriptの実行主体を確認
-- [ ] サイトでプロフィール項目管理、既存ユニットの所属除外・並べ替え、パート移行管理を補完
+- [ ] サイトでプロフィール項目管理、既存ユニットの所属除外・並べ替えを補完
 - [ ] 旧BMSG-DBのonOpenメニューと旧入力関数を廃止／機能フラグで拒否し、その後もサイトの各操作が成功
 - [ ] YouTube／分析／セットリストの参照を監査、削除SongIDの外部参照を解除
 - [ ] iPhoneで管理画面を操作、既存LYRICS・KARAOKE・QUIZ・COVER・ANALYSIS・PROFILEを回帰テスト
