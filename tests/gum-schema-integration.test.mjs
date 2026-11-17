@@ -10,6 +10,7 @@ function fixture(){
   const store={
     '01_Groups':[['GroupID'],['G1'],['U16'],['G9']],
     '02_Members':[['MemberID'],['M101'],['M507']],
+    '06_Songs':[['SongID'],['1001'],['1099']],
     'IDRegistry':[['EntityType','Scope','IssuedID','NumericValue','Status','RequestID','Source','IssuedAt','UpdatedAt','Note'],
       ['GROUP','GLOBAL','19',19,'COMMITTED','oldg','OLD','','',''],
       ['MEMBER','500','509',509,'ABORTED','oldm','OLD','','','']]
