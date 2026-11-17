@@ -98,9 +98,9 @@ test('song writer can create song, credits, lyrics and metrics without old input
   assert.equal(o.songId,'1099');
   assert.deepEqual(x.reservations,['NEXT_SONG_ID_1000']);
   assert.deepEqual(x.finalized,[true]);
-  assert.deepEqual(x.store.Songs.at(-1).slice(0,3),['1099','QA-Only Song','BE:FIRST']);
-  assert.deepEqual(x.store.Credits.at(-1).slice(0,3),['1099','QA-Only Song','QA Artist']);
-  assert.deepEqual(x.store.Parts.at(-1),['1099',1,'101','Original line']);
+  assert.deepEqual(Array.from(x.store.Songs.at(-1).slice(0,3)),['1099','QA-Only Song','BE:FIRST']);
+  assert.deepEqual(Array.from(x.store.Credits.at(-1).slice(0,3)),['1099','QA-Only Song','QA Artist']);
+  assert.deepEqual(Array.from(x.store.Parts.at(-1)),['1099',1,'101','Original line']);
   assert.equal(x.store.Metrics.at(-1)[0],'1099');
   assert.equal(Object.hasOwn(x.sheets,'入力_歌詞'),false);
 });
@@ -130,8 +130,8 @@ test('existing song info/credits/parts edit via site writer remains coherent',()
   ]});
   assert.equal(parts.ok,true);
   const own=x.store.Parts.slice(1).filter(r=>r[0]==='1099');
-  assert.deepEqual(own.map(r=>r[1]),[1,2]);
-  assert.deepEqual(own.map(r=>r[2]),['102','101_up']);
+  assert.deepEqual(Array.from(own.map(r=>r[1])),[1,2]);
+  assert.deepEqual(Array.from(own.map(r=>r[2])),['102','101_up']);
   assert.equal(x.store.Metrics.at(-1)[0],'1099');
 });
 test('song write rejects invalid or missing singers and preserves prior parts',()=>{
