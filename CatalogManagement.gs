@@ -368,7 +368,7 @@ function saveCatalogSoloForUniverse(payload){
 
 /**
  * Permanent deletion (not archive). Preview always rechecks live dependencies.
- * Child rows (credits, lyrics, metrics, part transfers) are cleared with Song.
+ * Child rows (credits, lyrics, metrics) are cleared with Song.
  * External workbooks are NOT under the Core DB transaction; users must first
  * inspect references such as YouTube analytics and setlists. Unknown Core / Log
  * references block deletion. IDRegistry is intentionally retained.
@@ -381,8 +381,7 @@ function catalogSongDeletePlan_(ss,songId) {
   const children=[
     [BU1.SHEETS.SONG_CREDITS,'07_SongCredits'],
     [BU1.SHEETS.LYRICS_PARTS,'08_LyricsParts'],
-    [BU1.SHEETS.METRICS,'10_PerformanceMetrics'],
-    [BU1.SHEETS.TRANSFERS,'11_PartTransfers']
+    [BU1.SHEETS.METRICS,'10_PerformanceMetrics']
   ];
   children.forEach(function(item){
     const table=catalogTable_(ss,item[0],['SongID']);
