@@ -192,7 +192,7 @@ function createCatalogBackupsForUniverse(payload){
   return withSharedWriterLock_('Core／Logバックアップ',function(){
     const folder=DriveApp.getFolderById('1YD-Df-gJPyes1fCRFYsOj5kL4YLidTyq'),stamp=Utilities.formatDate(new Date(),'Asia/Tokyo','yyyyMMdd_HHmmss'),copies=[];
     try{
-      [BU1.CORE_DB_ID,BU1.LOG_DB_ID].forEach(function(id,i){const file=DriveApp.getFileById(id).makeCopy('BMSG_Universe_'+(i?'Log':'Core')+'_BACKUP_'+stamp,folder);const ss=SpreadsheetApp.openById(file.getId());if(!ss.getSheetByName(i?'ProfileSettings':BU1.SHEETS.PROFILES))throw new Error('バックアップの照合に失敗しました。');copies.push(file.getId());});
+      [BU1.CORE_DB_ID,BU1.LOG_DB_ID].forEach(function(id,i){const file=DriveApp.getFileById(id).makeCopy('BMSG_Universe_'+(i?'Log':'Core')+'_BACKUP_'+stamp,folder);const ss=SpreadsheetApp.openById(file.getId());if(!ss.getSheetByName(i?'IDRegistry':BU1.SHEETS.PROFILES))throw new Error('バックアップの照合に失敗しました。');copies.push(file.getId());});
       const entry={createdAt:new Date().toISOString(),coreId:copies[0],logId:copies[1],actor:actor};
       const props=PropertiesService.getScriptProperties();props.setProperty('UNIVERSE_CATALOG_BACKUP_ID',entry.coreId);props.setProperty('UNIVERSE_CATALOG_LOG_BACKUP_ID',entry.logId);props.setProperty('UNIVERSE_CATALOG_BACKUP_HISTORY',JSON.stringify([entry].concat(catalogBackupHistory_()).slice(0,10)));
       return {ok:true,backup:entry};
@@ -246,13 +246,22 @@ function repairCatalogDatabaseForUniverse(payload){
   });
 }
 function catalogMasterTargets_(){
-  return [BU1.SHEETS.GROUPS,BU1.SHEETS.MEMBERS,BU1.SHEETS.GUESTS,BU1.SHEETS.GROUP_MEMBERS,BU1.SHEETS.PROFILES,BU1.SHEETS.SONGS,BU1.SHEETS.SONG_CREDITS,BU1.SHEETS.LYRICS_PARTS,BU1.SHEETS.CARDS,BU1.SHEETS.METRICS].map(function(name){return {book:'core',name:name};}).concat([{book:'log',name:'ProfileSettings'}]);
+  return [BU1.SHEETS.GROUPS,BU1.SHEETS.MEMBERS,BU1.SHEETS.GUESTS,BU1.SHEETS.GROUP_MEMBERS,BU1.SHEETS.PROFILES,BU1.SHEETS.SONGS,BU1.SHEETS.SONG_CREDITS,BU1.SHEETS.LYRICS_PARTS,BU1.SHEETS.CARDS,BU1.SHEETS.METRICS].map(function(name){return {book:'core',name:name};}).concat([{book:'core',name:'ProfileSettings'}]);
 }
 function catalogMasterSnapshot_(coreId,logId){
   const books={core:SpreadsheetApp.openById(coreId),log:SpreadsheetApp.openById(logId)};
   return catalogMasterTargets_().map(function(target){
-    const sheet=requireSheet_(books[target.book],target.name),range=sheet.getDataRange();
-    return {book:target.book,name:target.name,values:range.getValues(),formulas:range.getFormulas()};
+    // Only independent historical backups may carry definitions in their old Log location.
+    let sheet=books[target.book].getSheetByName(target.name);
+    if(!sheet&&target.name==='ProfileSettings'&&coreId!==BU1.CORE_DB_ID)
+      sheet=books.log.getSheetByName(target.name);
+    if(!sheet)throw new Error(target.name+'がありません。');
+    const range=sheet.getDataRange(),values=range.getValues(),formulas=range.getFormulas();
+    if(target.name==='ProfileSettings'){
+      const retired=values[0].indexOf('QuizDifficulty');
+      if(retired>=0){values.forEach(function(row){row.splice(retired,1);});formulas.forEach(function(row){row.splice(retired,1);});}
+    }
+    return {book:target.book,name:target.name,values:values,formulas:formulas};
   });
 }
 function catalogSnapshotDigest_(snapshot){

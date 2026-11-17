@@ -17,7 +17,8 @@ function fixture(){
     Images:[['ImageID','TargetType','TargetID','Rarity','DriveFileID','DisplayOrder','IsProfileMain'],['100','Member','101','SSR','member-file',1,true],['101','Member','101','N','second-file',2,false],['200','Group','1','','logo-file',3,false]],
     Metrics:[['SongID','101'],['','歌唱'],['1001','']],
   };
-  const log={ProfileSettings:[['ProfileID','FieldName','DataType','IsMultiValue','DisplayGroup','IsCompareTarget','QuizDifficulty','DisplayOrder','IsActive'],['P000','呼ばれ順','NUMBER',false,'基本',false,'',0,true],['P001','好きな色','TEXT',false,'基本',false,'',1,true]],CATALOG_Audit:[['AuditID','EntityType','EntityID','Action','BeforeJSON','AfterJSON','ActorEmail','OccurredAt','Source']],CardCollections:[['UserID','ImageID']],RecentActivities:[['UserID','ActivityType','TargetID']],IDRegistry:[['IssuedID']]};
+  const log={ProfileSettings:[['ProfileID','FieldName','DataType','IsMultiValue','DisplayGroup','IsCompareTarget','DisplayOrder','IsActive'],['P000','呼ばれ順','NUMBER',false,'基本',false,0,true],['P001','好きな色','TEXT',false,'基本',false,1,true]],CATALOG_Audit:[['AuditID','EntityType','EntityID','Action','BeforeJSON','AfterJSON','ActorEmail','OccurredAt','Source']],CardCollections:[['UserID','ImageID']],RecentActivities:[['UserID','ActivityType','TargetID']],IDRegistry:[['IssuedID']]};
+  tables.ProfileSettings=log.ProfileSettings;delete log.ProfileSettings;
   const data={core:tables,log:log,backupCore0:structuredClone(tables),backupLog0:structuredClone(log)},writes=[],files=[];
   const props={UNIVERSE_CATALOG_ENABLED:'true',UNIVERSE_CATALOG_MEMBER_MAINTENANCE_ENABLED:'true',UNIVERSE_CATALOG_ADMIN_EMAILS:'admin@example.test',UNIVERSE_CATALOG_PROFILE_FIELDS_ENABLED:'true',UNIVERSE_CATALOG_BACKUP_ID:'backupCore0',UNIVERSE_CATALOG_LOG_BACKUP_ID:'backupLog0',UNIVERSE_CATALOG_BACKUP_HISTORY:JSON.stringify([{coreId:'backupCore0',logId:'backupLog0',createdAt:'2026-01-01'}])};
   let fail=null,failAudit=false,locked=false,serial=0;const books={};
@@ -84,7 +85,7 @@ test('group rename restores all related records after a partial write failure',(
 test('profile field edit preserves ProfileID/type and all member values',()=>{
   const x=fixture(),field=x.call('getCatalogMaintenanceBootstrapForUniverse').fields.find(f=>f.profileId==='P001'),values=structuredClone(x.tables.Profiles);
   x.call('updateCatalogProfileFieldForUniverse',{profileId:'P001',name:'好きな色（新）',displayGroup:'好み',displayOrder:8,expectedRevision:JSON.stringify(field)});
-  assert.equal(x.log.ProfileSettings[2][0],'P001');assert.equal(x.log.ProfileSettings[2][2],'TEXT');assert.deepEqual(x.tables.Profiles,values);
+  assert.equal(x.tables.ProfileSettings[2][0],'P001');assert.equal(x.tables.ProfileSettings[2][2],'TEXT');assert.deepEqual(x.tables.Profiles,values);
 });
 test('image main selection clears only other images of the same member and can reorder',()=>{
   const x=fixture();x.call('maintainCatalogImageForUniverse',{imageId:'101',expectedRevision:x.revision('Images','ImageID','101'),displayOrder:1,isProfileMain:true});
@@ -105,7 +106,7 @@ test('logo retirement clears Group/Brand records but keeps all member data',()=>
 });
 test('backups are copied and verified before publishing their IDs',()=>{
   const x=fixture();const r=x.call('createCatalogBackupsForUniverse',{confirm:'CREATE_BACKUP'});
-  assert.equal(x.files.length,2);assert.notEqual(r.backup.coreId,'core');assert.equal(x.props.UNIVERSE_CATALOG_BACKUP_ID,r.backup.coreId);assert.ok(x.data[r.backup.logId].ProfileSettings);
+  assert.equal(x.files.length,2);assert.notEqual(r.backup.coreId,'core');assert.equal(x.props.UNIVERSE_CATALOG_BACKUP_ID,r.backup.coreId);assert.ok(x.data[r.backup.coreId].ProfileSettings);assert.ok(x.data[r.backup.logId].IDRegistry);
 });
 test('repair preview writes nothing; execution fills only missing canonical rows',()=>{
   const x=fixture();x.tables.Profiles.pop();x.tables.Links.pop();const preview=x.call('repairCatalogDatabaseForUniverse',{preview:true});assert.equal(x.writes.length,0);assert.equal(preview.plan.length,2);
@@ -176,4 +177,24 @@ test('all Universe users manage guests and groups without activation flags or Go
   assert.equal(x.tables.Guests[1][1],'Corrected');assert.equal(x.tables.Groups[2][1],'Shared group');
   assert.equal(x.call('getCatalogManagementReadinessForUniverse',{userId}).ready,true);
  }
+});
+
+test('historical Log field definitions restore into Core and discard retired quiz column',()=>{
+  const x=fixture();
+  const old=x.data.backupCore0.ProfileSettings;
+  delete x.data.backupCore0.ProfileSettings;
+  old.forEach((r,i)=>r.splice(6,0,i===0?'QuizDifficulty':'普通'));
+  x.data.backupLog0.ProfileSettings=old;
+  x.tables.ProfileSettings[2][1]='Changed field';
+  const plan=x.call('restoreCatalogMasterDataForUniverse',{preview:true,backupId:'backupCore0'});
+  x.call('restoreCatalogMasterDataForUniverse',{preview:false,backupId:'backupCore0',expectedRevision:plan.revision,confirm:'RESTORE_MASTER_DATA'});
+  assert.equal(x.tables.ProfileSettings[2][1],'好きな色');
+  assert.equal(x.tables.ProfileSettings[0].length,8);
+  assert.equal(x.log.ProfileSettings,undefined);
+  assert.equal(x.data.backupLog0.ProfileSettings[0][6],'QuizDifficulty');
+});
+
+test('live profile definitions require Core even if a stale Log copy exists',()=>{
+  const x=fixture();x.log.ProfileSettings=x.tables.ProfileSettings;delete x.tables.ProfileSettings;
+  assert.throws(()=>x.call('getCatalogMaintenanceBootstrapForUniverse',{}),/ProfileSettings|見つかり|ありません|Missing/);
 });

@@ -43,10 +43,10 @@ test('profile metadata validates names, types and compatible multivalue fields',
 
 test('field hide / restore changes only ProfileSettings.IsActive and retains values',()=>{
   const headers=['ProfileID','FieldName','DataType','IsMultiValue','DisplayGroup',
-    'IsCompareTarget','QuizDifficulty','DisplayOrder','IsActive'];
+    'IsCompareTarget','DisplayOrder','IsActive'];
   const map=Object.fromEntries(headers.map((v,i)=>[v,i]));
   const rec=(id,name,active,rowNumber)=>({
-    rowNumber,values:[id,name,'TEXT',false,'基本',false,'普通',rowNumber-2,active]
+    rowNumber,values:[id,name,'TEXT',false,'基本',false,rowNumber-2,active]
   });
   const original=[
     rec('P000','呼ばれ順',true,2),
@@ -61,10 +61,10 @@ test('field hide / restore changes only ProfileSettings.IsActive and retains val
   const audits=[];
   const log={
     getRange:(row,col)=>{
-      assert.equal(col,9);
+      assert.equal(col,map.IsActive+1);
       return {
-        getValue:()=>settings.rows[row-2].values[8],
-        setValue:(v)=>{settings.rows[row-2].values[8]=v;}
+        getValue:()=>settings.rows[row-2].values[map.IsActive],
+        setValue:(v)=>{settings.rows[row-2].values[map.IsActive]=v;}
       };
     }
   };
@@ -90,11 +90,11 @@ test('field hide / restore changes only ProfileSettings.IsActive and retains val
   const act=(args)=>vm.runInContext('setCatalogProfileFieldActiveForUniverse('+JSON.stringify(args)+')',context);
   const disabled=act({profileId:'P001',expectedActive:true,isActive:false});
   assert.equal(disabled.ok,true);
-  assert.equal(settings.rows[1].values[8],false);
+  assert.equal(settings.rows[1].values[map.IsActive],false);
   assert.equal(profile.rows[0].values[2],'テスト');
   const restored=act({profileId:'P001',expectedActive:false,isActive:true});
   assert.equal(restored.isActive,true);
-  assert.equal(settings.rows[1].values[8],true);
+  assert.equal(settings.rows[1].values[map.IsActive],true);
   assert.equal(audits.length,2);
   assert.throws(()=>act({profileId:'P000',expectedActive:true,isActive:false}),/基礎項目/);
   assert.throws(()=>act({profileId:'P001',expectedActive:false,isActive:false}),/最新情報/);
@@ -112,7 +112,7 @@ test('create path preserves old cells and rolls back partially added field',()=>
   assert.doesNotMatch(src,/clearDataRows_/);
 });
 
-test('field creation writes P016 to Core and Log without changing existing values; rollback is safe',()=>{
+test('field creation writes P016 to Core value and definition tables without changing existing values; rollback is safe',()=>{
   function fakeSheet(rows){
     const sh={
       data:rows.map(r=>r.slice()),
@@ -139,11 +139,11 @@ test('field creation writes P016 to Core and Log without changing existing value
   }
   function makeSandbox(failAudit){
     const headers=['ProfileID','FieldName','DataType','IsMultiValue','DisplayGroup',
-      'IsCompareTarget','QuizDifficulty','DisplayOrder','IsActive'];
+      'IsCompareTarget','DisplayOrder','IsActive'];
     const settings=fakeSheet([
       headers,
-      ['P000','呼ばれ順','NUMBER',false,'基本',true,'普通',0,true],
-      ['P001','本名','TEXT',false,'基本',false,'普通',1,true]
+      ['P000','呼ばれ順','NUMBER',false,'基本',true,0,true],
+      ['P001','本名','TEXT',false,'基本',false,1,true]
     ]);
     const profile=fakeSheet([['MemberID','P000','P001'],['101',1,'テスト']]);
     const core={getSheetByName:()=>profile}, log={getSheetByName:()=>settings};
@@ -202,7 +202,7 @@ test('field creation writes P016 to Core and Log without changing existing value
   assert.deepEqual(ok.profile.data[1],['101',1,'テスト','']);
   assert.equal(ok.settings.data.at(-1)[0],'P016');
   assert.equal(ok.settings.data.at(-1)[1],'推しカラー');
-  assert.equal(ok.settings.data.at(-1)[8],true);
+  assert.equal(ok.settings.data.at(-1)[ok.settings.data[0].indexOf('IsActive')],true);
   assert.deepEqual(ok.statuses,[true]);
   assert.equal(ok.audits.length,1);
   const failed=makeSandbox(true);

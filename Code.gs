@@ -231,7 +231,7 @@ function maxProfileNumber_(ss) {
   const headers = profiles.getRange(1,1,1,Math.max(1,profiles.getLastColumn())).getDisplayValues()[0];
   headers.forEach(function(value){ const m=String(value||'').trim().match(/^P(\d+)$/i); if(m) max=Math.max(max,Number(m[1])); });
   try {
-    const log = SpreadsheetApp.openById(BU1.LOG_DB_ID).getSheetByName('ProfileSettings');
+    const log = ss.getSheetByName('ProfileSettings');
     if (log) {
       const values = log.getDataRange().getDisplayValues();
       const col = (values[0] || []).indexOf('ProfileID');

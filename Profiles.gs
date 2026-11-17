@@ -9,11 +9,10 @@ const BU_PROFILE = Object.freeze({
   DATA_START_ROW: 10,
   FIXED_COLUMNS: 4,
   EMPTY_FIELD_COLUMNS: 3,
-  LOG_DB_ID: '10vDKc_Q431iMDTTqB2A16i-Yp28oXSInoKiJXZtonRQ',
   PROFILE_SETTINGS_SHEET: 'ProfileSettings',
   PROFILE_SETTINGS_HEADERS: Object.freeze([
     'ProfileID', 'FieldName', 'DataType', 'IsMultiValue', 'DisplayGroup',
-    'IsCompareTarget', 'QuizDifficulty', 'DisplayOrder', 'IsActive'
+    'IsCompareTarget', 'DisplayOrder', 'IsActive'
   ]),
 });
 
@@ -207,9 +206,9 @@ function normalizeStoredProfileValue_(value, field) {
 }
 
 function getProfileSettingsTable_() {
-  const logSs = SpreadsheetApp.openById(BU_PROFILE.LOG_DB_ID);
-  const sheet = logSs.getSheetByName(BU_PROFILE.PROFILE_SETTINGS_SHEET);
-  if (!sheet) throw new Error('BMSG_ Universe_Log に ProfileSettings シートがありません');
+  const coreSs = openCoreSpreadsheet_();
+  const sheet = coreSs.getSheetByName(BU_PROFILE.PROFILE_SETTINGS_SHEET);
+  if (!sheet) throw new Error('Core DB に ProfileSettings シートがありません');
   const table = readTable_(sheet);
   requireColumns_(table, BU_PROFILE.PROFILE_SETTINGS_HEADERS);
   return table;
@@ -237,7 +236,6 @@ function appendProfileSettingForNewField_(table, profileId, field, displayOrder)
     field.isMulti,
     field.inputGroup || '基本',
     false,
-    '',
     displayOrder,
     true,
   ]);
@@ -250,7 +248,7 @@ function applyProfileSyncPlan_(ss, plan) {
   const fieldIdByInputCol = {};
   plan.fields.forEach(f => { fieldIdByInputCol[f.col] = f.profileId; });
 
-  // 新規項目がある場合は、コアDBを書き始める前にLog側の構造を検証する。
+  // 新規項目がある場合は、コアDBを書き始める前にCoreの項目定義構造を検証する。
   const profileSettings = plan.newFields.length ? getProfileSettingsTable_() : null;
   let nextSettingsOrder = profileSettings ? nextProfileSettingsDisplayOrder_(profileSettings) : 0;
 

@@ -1,8 +1,8 @@
 /**
  * Site-only profile FIELD administration (not profile VALUE editing).
  *
- * Existing profile values stay in Core 05_Profiles; the 9-column
- * ProfileSettings table in Log DB remains the sole field definition.
+ * Existing profile values stay in Core 05_Profiles; the 8-column
+ * ProfileSettings table in Core DB remains the sole field definition.
  * Hidden fields are kept intact and are reactivated by IsActive=true.
  *
  * All selected Universe users can manage fields.
@@ -13,7 +13,7 @@
 const PF_MGMT_SETTINGS_ = 'ProfileSettings';
 const PF_MGMT_HEADERS_ = Object.freeze([
   'ProfileID','FieldName','DataType','IsMultiValue','DisplayGroup',
-  'IsCompareTarget','QuizDifficulty','DisplayOrder','IsActive'
+  'IsCompareTarget','DisplayOrder','IsActive'
 ]);
 
 function pfMgmtActive_(value) {
@@ -21,8 +21,7 @@ function pfMgmtActive_(value) {
 }
 function pfMgmtRequireShape_(ss) {
   const profile=catalogTable_(ss,BU1.SHEETS.PROFILES,['MemberID']);
-  const log=SpreadsheetApp.openById(BU1.LOG_DB_ID);
-  const settings=catalogTable_(log,PF_MGMT_SETTINGS_,PF_MGMT_HEADERS_);
+  const settings=catalogTable_(ss,PF_MGMT_SETTINGS_,PF_MGMT_HEADERS_);
   const seen=Object.create(null),labels=Object.create(null);
   settings.rows.forEach(function(r){
     const id=id_(r.values[settings.map.ProfileID]);
@@ -67,8 +66,7 @@ function pfMgmtBootstrapRows_(state) {
         displayGroup:clean_(v[col.DisplayGroup]),
         displayOrder:Number(v[col.DisplayOrder])||0,
         isActive:pfMgmtActive_(v[col.IsActive]),
-        isCompareTarget:pfMgmtActive_(v[col.IsCompareTarget]),
-        quizDifficulty:clean_(v[col.QuizDifficulty])
+        isCompareTarget:pfMgmtActive_(v[col.IsCompareTarget])
       };
     })
     .sort(function(a,b){return a.displayOrder-b.displayOrder||a.profileId.localeCompare(b.profileId);});
@@ -94,12 +92,12 @@ function pfMgmtBackupGate_() {
     const file=DriveApp.getFileById(value);
     if(!file||!file.getName())throw new Error('バックアップにアクセスできません: '+pair[0]);
     const backup=SpreadsheetApp.openById(value);
-    const required=pair[0]==='UNIVERSE_CATALOG_BACKUP_ID'?BU1.SHEETS.PROFILES:PF_MGMT_SETTINGS_;
+    const required=pair[0]==='UNIVERSE_CATALOG_BACKUP_ID'?BU1.SHEETS.PROFILES:'IDRegistry';
     if(!backup.getSheetByName(required))throw new Error('バックアップに必要なタブがありません: '+required);
   });
 }
 /**
- * One-field transaction across Core and Log.
+ * One-field transaction within Core (audit and reservations remain in Log).
  * A failed creation removes only the just-added column/row; no existing profile
  * values are touched. ProfileID is intentionally never recycled.
  */
@@ -143,7 +141,7 @@ function createCatalogProfileFieldForUniverse(payload) {
       const fields={
         ProfileID:reserved.issuedId,FieldName:data.name,DataType:data.dataType,
         IsMultiValue:data.isMultiValue,DisplayGroup:data.displayGroup,
-        IsCompareTarget:false,QuizDifficulty:'普通',DisplayOrder:last+1,IsActive:true
+        IsCompareTarget:false,DisplayOrder:last+1,IsActive:true
       };
       Object.keys(fields).forEach(function(key){values[state.settings.map[key]]=fields[key];});
       logRow=appendStyledRow_(log,values);
@@ -179,8 +177,8 @@ function createCatalogProfileFieldForUniverse(payload) {
   });
 }
 /**
- * Toggle ONLY Log ProfileSettings.IsActive. Never delete or hide Core cells.
- * Existing Profile and Quiz readers already respect this flag.
+ * Toggle ONLY Core ProfileSettings.IsActive. Never delete or hide Core cells.
+ * Existing Profile and search readers already respect this flag.
  */
 function setCatalogProfileFieldActiveForUniverse(payload) {
   const actor=catalogRequireUser_(payload);
