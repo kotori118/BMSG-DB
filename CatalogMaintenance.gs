@@ -43,6 +43,7 @@ function catalogMaintenanceReferences_(ss,kind,id,skip){
         if(skip&&skip(t,row,book))return;
         const v=row.values,m=t.map;
         let found=key&&m[key]!=null&&matchesRef_(v[m[key]]);
+        if((kind==='GROUP'||kind==='MEMBER')&&m.ArtistID!=null&&id_(v[m.ArtistID])===id)found=true;
         if(kind==='IMAGE'&&m.ActivityType!=null&&m.TargetID!=null&&String(v[m.ActivityType])==='DRAW_CARD'&&matchesRef_(v[m.TargetID]))found=true;
         if(kind==='SONG') ['SourceSongID','OriginalSongID','TargetSongID'].forEach(function(k){if(m[k]!=null&&id_(v[m[k]])===id)found=true;});
         if(kind==='GUEST')Object.keys(m).filter(function(k){return /Singer|GuestID/.test(k);}).forEach(function(k){if(String(v[m[k]]||'').split(/[^0-9A-Za-z]+/).indexOf(id)>=0)found=true;});
@@ -111,7 +112,7 @@ function maintainCatalogGroupForUniverse(payload){
     if(payload.action==='DELETE'){
       if(payload.confirm!==id)throw new Error('GroupIDの確認が必要です。');pfMgmtBackupGate_();
       const blockers=catalogMaintenanceReferences_(ss,'GROUP',id,function(tab,r,book){return book===ss&&tab.sheet.getName()===t.sheet.getName()&&r.rowNumber===row.rowNumber;});
-      const songs=catalogTable_(ss,BU1.SHEETS.SONGS,['Artist']);if(songs.rows.some(function(r){return clean_(r.values[songs.map.Artist])===before.GroupName;}))blockers.push('楽曲Artist');
+      const songs=catalogTable_(ss,BU1.SHEETS.SONGS,['SongID']);if(songs.rows.some(function(r){return universeServiceStoredArtist_(songs,r)===(songs.map.ArtistID==null?before.GroupName:id);}))blockers.push('楽曲Artist');
       if(blockers.length)throw new Error('参照が残っています: '+blockers.join(' / '));
       return catalogCommitCells_(catalogClearRowCells_(t,row),'GROUP',id,'DELETE',before,null,actor);
     }
@@ -123,38 +124,50 @@ function maintainCatalogGroupForUniverse(payload){
     const changes={GroupName:name,DisplayOrder:order,ColorHex:catalogValidateChangedColor_(ss,payload.color,before.ColorHex,'GROUP',id)};
     const edits=catalogEditCells_(t,row,changes);
     // Group IDs remain unchanged; Artist names in existing songs follow the renamed group.
-    const songs=catalogTable_(ss,BU1.SHEETS.SONGS,['Artist']);songs.rows.filter(function(r){return clean_(r.values[songs.map.Artist])===before.GroupName;}).forEach(function(r){edits.push.apply(edits,catalogEditCells_(songs,r,{Artist:name}));});
+    const songs=catalogTable_(ss,BU1.SHEETS.SONGS,['SongID']);if(songs.map.ArtistID==null)songs.rows.filter(function(r){return clean_(r.values[songs.map.Artist])===before.GroupName;}).forEach(function(r){edits.push.apply(edits,catalogEditCells_(songs,r,{Artist:name}));});
     if(name!==before.GroupName){
       const log=SpreadsheetApp.openById(BU1.LOG_DB_ID);
       log.getSheets().forEach(function(sheet){if(sheet.getName()==='CATALOG_Audit')return;const tab=readTable_(sheet);if(tab.map.Course==null)return;tab.rows.forEach(function(r){if(String(r.values[tab.map.Course]).toUpperCase()===before.GroupName.toUpperCase())edits.push.apply(edits,catalogEditCells_(tab,r,{Course:name.toUpperCase()}));});});
     }
-    if(before.GroupName==='BE:FIRST'&&name!==before.GroupName)throw new Error('BE:FIRSTは分析・ソロ分類の基準名のため変更できません。');
+    if(id==='G1'&&name!==before.GroupName)throw new Error('BE:FIRSTは分析の基準名のため変更できません。');
     return catalogCommitCells_(edits,'GROUP',id,'EDIT',before,changes,actor);
   });
 }
 function correctCatalogSongArtistForUniverse(payload){
   const actor=catalogRequireUser_(payload),id=id_(payload.songId),artist=catalogRequiredString_(payload.artist,'アーティスト',120);
   return withSharedWriterLock_('楽曲Artistの訂正',function(){
-    const ss=openCoreSpreadsheet_();catalogRequireReady_(ss);assertUniverseServiceArtist_(ss,artist);
-    const t=catalogTable_(ss,BU1.SHEETS.SONGS,['SongID','Artist','ArtistRef','SongType','SoloMemberID']),row=catalogRow_(t,'SongID',id),before=catalogRec_(t,row);
-    if(payload.expectedArtist!==before.Artist||payload.confirm!==id)throw new Error('変更前Artistと確認が一致しません。');
-    if(artist===before.Artist)return {ok:true,unchanged:true};
-    // Crossing the BE:FIRST-only analysis boundary requires empty dependent records.
+    const ss=openCoreSpreadsheet_();catalogRequireReady_(ss);
+    const identity=universeServiceArtistIdentity_(ss,artist);
+    const t=catalogTable_(ss,BU1.SHEETS.SONGS,['SongID']),row=catalogRow_(t,'SongID',id),before=catalogRec_(t,row);
+    const usesArtistId=t.map.ArtistID!=null;
+    const current=universeServiceStoredArtist_(t,row);
+    const next=usesArtistId?identity.id:identity.name;
+    if(String(payload.expectedArtist||'')!==current||payload.confirm!==id)throw new Error('変更前のアーティストと確認が一致しません。');
+    if(next===current)return {ok:true,unchanged:true};
+    if(t.rows.some(r=>r.rowNumber!==row.rowNumber&&clean_(r.values[t.map.Title])===before.Title&&universeServiceStoredArtist_(t,r)===next))
+      throw new Error('同じ曲名とアーティストの曲が登録済みです。');
+    if(/^M\d+$/.test(identity.id)){
+      const lyrics=catalogTable_(ss,BU1.SHEETS.LYRICS_PARTS,['SongID']);
+      if(lyrics.rows.some(r=>id_(r.values[lyrics.map.SongID])===id))
+        throw new Error('歌詞が登録されているため個人曲には変更できません。');
+    }
     const credits=catalogTable_(ss,BU1.SHEETS.SONG_CREDITS,['SongID']),metrics=catalogTable_(ss,BU1.SHEETS.METRICS,['SongID']);
-    if(before.Artist==='BE:FIRST'&&artist!=='BE:FIRST'){
+    if(universeServiceBeFirst_(t,row)&&identity.id!=='G1'){
       const meaningful=function(tab){return tab.rows.some(function(r){return id_(r.values[tab.map.SongID])===id&&r.values.some(function(v,i){return !['SongID','Title'].includes(tab.header[i])&&v!==''&&v!==null&&v!==0;});});};
-      if(meaningful(credits)||meaningful(metrics))throw new Error('制作クレジット・秒数データがあります。内容を空にしてからArtistを訂正してください。');
+      if(meaningful(credits)||meaningful(metrics))throw new Error('制作クレジット・秒数データがあります。内容を空にしてからアーティストを訂正してください。');
     }
     const appended=[];
     try{
-      if(artist==='BE:FIRST'){
+      if(identity.id==='G1'){
         if(!credits.rows.some(function(r){return id_(r.values[credits.map.SongID])===id;})){
           const v=new Array(credits.header.length).fill('');v[credits.map.SongID]=id;if(credits.map.Title!=null)v[credits.map.Title]=before.Title;
           appended.push({sheet:credits.sheet,row:appendStyledRow_(credits.sheet,v)});
         }
         const metric=ensurePerformanceMetricRowForSong_(ss,id);if(metric.created)appended.push(metric);
       }
-      return catalogCommitCells_(catalogEditCells_(t,row,{Artist:artist,ArtistRef:universeServiceArtistRef_(ss,artist),SongType:'NORMAL',SoloMemberID:''}),'SONG',id,'CORRECT_ARTIST',before,{Artist:artist},actor);
+      const personal=/^M\d+$/.test(identity.id);
+      const changes=usesArtistId?{ArtistID:identity.id}:{Artist:identity.name,ArtistRef:identity.id,SongType:personal?'SOLO':'NORMAL',SoloMemberID:personal?identity.id:''};
+      return catalogCommitCells_(catalogEditCells_(t,row,changes),'SONG',id,'CORRECT_ARTIST',before,changes,actor);
     }catch(error){appended.reverse().forEach(function(r){try{r.sheet.deleteRow(r.row);}catch(rollback){throw new Error(error.message+'／追加行の復旧失敗: '+rollback.message);}});throw error;}
   });
 }

@@ -10,16 +10,18 @@ function fixture(){
   vm.createContext(env);vm.runInContext(fn,env);
   return{env,writes,audits,save:p=>env.createCatalogSongDraftForUniverse(p)};
 }
-test('solo song with lyrics is created in one shared writer transaction with credits and classification',()=>{
-  const f=fixture();f.save({userId:'U001',song:{title:'Test',artist:'BE:FIRST'},credits:{lyricists:'Writer'},songType:'SOLO',soloMemberId:'101',includeLyrics:true,rawLyrics:'SOTA\nTest'});
-  assert.equal(f.writes.length,1);assert.equal(f.writes[0].parts.length,1);
-  assert.equal(f.writes[0].context.songType,'SOLO');assert.equal(f.writes[0].context.soloMemberId,'101');assert.equal(f.writes[0].context.allowEmptyParts,false);
-  assert.equal(f.writes[0].credits.lyricists,'Writer');assert.equal(f.audits[0][2],'CREATE_WITH_LYRICS');
+test('member artist IDs register a personal song without lyrics',()=>{
+  const f=fixture();
+  f.save({userId:'U001',song:{title:'Test',artist:'M101'},includeLyrics:false});
+  assert.equal(f.writes.length,1);
+  assert.equal(f.writes[0].song.artist,'M101');
+  assert.equal(f.writes[0].parts.length,0);
+  assert.equal(f.audits[0][2],'CREATE_NO_LYRICS');
 });
-test('invalid lyrics and non-BEFIRST solo songs fail before the core writer is called',()=>{
+test('personal song lyrics and invalid group lyrics fail before the core writer',()=>{
   const f=fixture();f.env.parseSongLyricsForUniverse=()=>({canRegister:false,unknownGuests:['Unknown'],parts:[]});
-  assert.throws(()=>f.save({song:{artist:'BE:FIRST'},includeLyrics:true}),/歌詞/);
-  assert.throws(()=>f.save({song:{artist:'Other'},songType:'SOLO',soloMemberId:'101'}),/BE:FIRST/);
+  assert.throws(()=>f.save({song:{artist:'G1'},includeLyrics:true}),/歌詞/);
+  assert.throws(()=>f.save({song:{artist:'M101'},includeLyrics:true}),/個人曲/);
   assert.equal(f.writes.length,0);
 });
 test('existing lyricless registration remains compatible and allows zero parts explicitly',()=>{

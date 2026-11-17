@@ -43,7 +43,7 @@ function fixture(){
     appendStyledRow_:(s,v)=>{if(failAudit&&s.getName()==='CATALOG_Audit')throw Error('audit unavailable');const row=s.getLastRow()+1;s.getRange(row,1,1,v.length).setValues([v]);return row;},
     withSharedWriterLock_:(_,f)=>{if(locked)throw Error('nested lock');locked=true;try{return f();}finally{locked=false;}},assertUniverseServiceArtist_:(_,artist)=>{if(!tables.Groups.slice(1).some(r=>r[1]===artist))throw Error('artist');},universeServiceArtistRef_:(_,artist)=>{const g=tables.Groups.slice(1).find(r=>r[1]===artist);if(!g)throw Error('artist');return g[0];}
   };
-  vm.createContext(env);vm.runInContext(read('CatalogManagement.gs')+'\n'+read('ProfileFieldManagement.gs')+'\n'+read('CatalogMaintenance.gs')+'\n'+read('MetricsTransfers.gs')+'\n'+read('CatalogMemberMaintenance.gs'),env);
+  vm.createContext(env);vm.runInContext(read('UniverseService.gs')+'\n'+read('CatalogManagement.gs')+'\n'+read('ProfileFieldManagement.gs')+'\n'+read('CatalogMaintenance.gs')+'\n'+read('MetricsTransfers.gs')+'\n'+read('CatalogMemberMaintenance.gs'),env);
   const call=(fn,p={})=>env[fn]({userId:'U001',...p});const revision=(name,key,id)=>{const t=env.catalogTable_(book('core'),name,[key]),r=env.catalogRow_(t,key,id);return env.catalogRowRevision_(t,r);};
   return{data,tables,log,props,writes,files,env,call,revision,failOnce:fn=>fail=fn,failAudit:()=>failAudit=true};
 }
@@ -114,7 +114,7 @@ test('repair preview writes nothing; execution fills only missing canonical rows
 });
 test('stale repair plan and unknown user are refused without writes',()=>{
   const x=fixture();assert.throws(()=>x.call('repairCatalogDatabaseForUniverse',{preview:false,confirm:'REPAIR',expectedRevision:'stale'}),/再確認/);
-  assert.throws(()=>x.call('getCatalogMaintenanceBootstrapForUniverse',{userId:'unknown'}),/user/);assert.equal(x.writes.length,0);
+  assert.throws(()=>x.call('getCatalogMaintenanceBootstrapForUniverse',{userId:'unknown'}),/利用ユーザー/);assert.equal(x.writes.length,0);
 });
 test('backup restore preview writes nothing; restore preserves service histories and IDRegistry',()=>{
   const x=fixture();x.tables.Profiles[1][2]='Changed';x.log.CardCollections.push(['U001','100']);x.log.IDRegistry.push(['9999']);const logBefore=structuredClone(x.log.CardCollections);
