@@ -15,6 +15,7 @@ function auditCatalogDatabaseForUniverse(payload) {
   const songs=catalogTable_(ss,BU1.SHEETS.SONGS,['SongID','Title','Artist']);
   const credits=catalogTable_(ss,BU1.SHEETS.SONG_CREDITS,['SongID','Title']);
   const lyrics=catalogTable_(ss,BU1.SHEETS.LYRICS_PARTS,['SongID','PartOrder']);
+  const metrics=catalogTable_(ss,BU1.SHEETS.METRICS,['SongID']);
   const transfers=catalogTable_(ss,BU1.SHEETS.TRANSFERS,['TransferID','SongID']);
   const warnings=[];
   const sampleLimit=25;
@@ -66,8 +67,8 @@ function auditCatalogDatabaseForUniverse(payload) {
     const sid=id_(r.values[songs.map.SongID]),artist=clean_(r.values[songs.map.Artist]);
     if(!knownNames.has(artist))warn('UNKNOWN_ARTIST','06_Songs '+sid+' Artist '+artist+' が管理マスターにない');
   });
-  const childStats={credits:0,lyrics:0,transfers:0};
-  const seenCredit=new Set(),seenParts=new Set();
+  const childStats={credits:0,lyrics:0,metrics:0,transfers:0};
+  const seenCredit=new Set(),seenMetrics=new Set(),seenParts=new Set();
   const titles=new Map(nonemptySongs.map(function(r){return [id_(r.values[songs.map.SongID]),clean_(r.values[songs.map.Title])];}));
   credits.rows.forEach(function(r) {
     const sid=id_(r.values[credits.map.SongID]);if(!sid)return;
@@ -87,10 +88,22 @@ function auditCatalogDatabaseForUniverse(payload) {
     if(seenParts.has(key))warn('DUPLICATE_PART','08_LyricsParts '+key+' が重複');
     seenParts.add(key);
   });
+  metrics.rows.forEach(function(r) {
+    const sid=id_(r.values[metrics.map.SongID]);if(!sid)return;
+    childStats.metrics++;
+    if(!has(songIds,sid))warn('ORPHAN_METRICS','10_PerformanceMetrics '+sid+' の曲が存在しない');
+    if(seenMetrics.has(sid))warn('DUPLICATE_METRICS','10_PerformanceMetrics '+sid+' が重複');
+    seenMetrics.add(sid);
+  });
   transfers.rows.forEach(function(r) {
     const sid=id_(r.values[transfers.map.SongID]);if(!sid)return;
     childStats.transfers++;
     if(!has(songIds,sid))warn('ORPHAN_TRANSFER','11_PartTransfers '+sid+' の曲が存在しない');
+  });
+  nonemptySongs.forEach(function(r) {
+    const sid=id_(r.values[songs.map.SongID]);
+    if(clean_(r.values[songs.map.Artist])==='BE:FIRST'&&!seenMetrics.has(sid))
+      warn('MISSING_METRICS','BE:FIRST '+sid+' の秒数行がない');
   });
   const tabs=ss.getSheets().map(function(sh) {
     const name=sh.getName();
@@ -111,7 +124,7 @@ function auditCatalogDatabaseForUniverse(payload) {
     tabs:tabs,legacyInputTabs:legacy,reviewTabs:review,
     counts:{groups:groupIds.size,members:memberIds.size,profiles:profileIds.size,
       songs:songIds.size,links:membershipKeys.size,credits:childStats.credits,
-      lyrics:childStats.lyrics,transfers:childStats.transfers},
+      lyrics:childStats.lyrics,metrics:childStats.metrics,transfers:childStats.transfers},
     warnings:warnings,warningsTruncated:warnings.length>=sampleLimit,
     guidance:'診断は読み取りのみ。旧入力タブ、移行履歴、重複Title列や秒数表の構造は、本番移行・依存確認前に削除しない。'
   };
