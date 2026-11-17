@@ -65,6 +65,28 @@ Log DB 22タブはUsers/IDRegistry/ProfileSettings/各サービスの操作ロ�
 - ステージング管理画面から「DB構造を診断」可能（管理者のみ／feature flag）。
 - 旧本番サイトはBMSGDBライブラリv14固定。開発版のコードをmainに取り込まない。
 
+## 読み取り監査の現時点の実績
+
+2026-11-17にCore DBを読み取り確認した値（データは変更していない）:
+
+- GroupID：13種／MemberID：33種／SongID：164種。
+- 06_SongsのSongID重複：なし。
+- 04_GroupMembersの所属重複／不明GroupID・MemberID：なし。
+- 07_SongCreditsの存在しないSongID参照・曲名不一致：なし。
+- 08_LyricsParts、10_PerformanceMetrics、11_PartTransfersの存在しないSongID参照：なし。
+- BE:FIRST曲の10_PerformanceMetrics行の欠落：なし。
+- 10_PerformanceMetricsの同一SongID重複：なし。
+
+これは照合時点の検査。サイト移行直前に再実行して差分を確認する。
+
+## サイト管理への切替スイッチ（開発ブランチで用意済み）
+
+`UNIVERSE_SITE_ONLY_WRITES=true` のとき、旧Sheetsメニューからの書き込み操作を非表示にし、旧プロフィール・所属・Guest／楽曲・歌詞・秒数表再同期・カード修復・パート移行削除のGAS経路を拒否する。**初期値はOFF**。
+
+このスイッチだけでは編集権限を持つ利用者の直接セル編集を禁止できない。Sheetsの権限変更とGAS実行主体を別途実証すること。
+
+新規のGroup/Member/Songの採番では、各Band上限を超えた番号は発行確定せず失敗として扱う。IDRegistryと元のデータを維持。
+
 ## 本番移行の前提条件
 
 - [ ] DB検査結果の不整合に対処、変更前・変更後件数を記録
