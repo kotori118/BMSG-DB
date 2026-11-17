@@ -64,7 +64,6 @@ test('deletion cleans direct children without shifting unrelated spreadsheet row
   assert.match(catalog,/BU1\.SHEETS\.SONG_CREDITS/);
   assert.match(catalog,/BU1\.SHEETS\.LYRICS_PARTS/);
   assert.match(catalog,/BU1\.SHEETS\.METRICS/);
-  assert.match(catalog,/BU1\.SHEETS\.TRANSFERS/);
   assert.match(catalog,/snap\.range\.clearContent\(\)/);
   assert.match(catalog,/snap\.formulas\[i\]\|\|v/);
   assert.match(catalog,/CATALOG_Audit/);
@@ -103,7 +102,7 @@ test('sheet-entry routes can be locked when site-only mode is enabled',()=>{
     'Profiles.gs':['confirmAndSyncProfiles','retireSelectedProfileField','restoreRetiredProfileFields'],
     'Masters.gs':['confirmAndSyncDirectMasters'],
     'Lyrics.gs':['commitLyricsInput'],
-    'MetricsTransfers.gs':['syncPerformanceMetricRows','deleteSelectedPartTransfer'],
+    'MetricsTransfers.gs':['syncPerformanceMetricRows'],
     'Cards.gs':['syncCardsOnAccess_'],
     'UniverseService.gs':['commitLegacyDirectMasters_','commitLegacyLyricsInputForSharedWriter_']
   };
@@ -125,4 +124,20 @@ test('schema installation checks existing catalog audit table headers before mut
   assert.match(catalog,/existingAudit/);
   assert.match(catalog,/列構造に不整合があります/);
   assert.match(catalog,/Log\.CATALOG_Audit\./);
+});
+
+test('PartTransfers are retired without touching PerformanceMetrics',()=>{
+  const code=fs.readFileSync(path.join(root,'Code.gs'),'utf8');
+  const metrics=fs.readFileSync(path.join(root,'MetricsTransfers.gs'),'utf8');
+  const profile=fs.readFileSync(path.join(root,'Profiles.gs'),'utf8');
+  const audit=fs.readFileSync(path.join(root,'CatalogDbAudit.gs'),'utf8');
+  assert.doesNotMatch(code,/11_PartTransfers|SHEETS\.TRANSFERS|NEXT_TRANSFER_ID/);
+  assert.doesNotMatch(profile,/SHEETS\.TRANSFERS/);
+  assert.doesNotMatch(catalog,/SHEETS\.TRANSFERS/);
+  assert.doesNotMatch(audit,/SHEETS\.TRANSFERS|ORPHAN_TRANSFER/);
+  assert.doesNotMatch(metrics,/confirmAndSyncPartTransfers|deleteSelectedPartTransfer/);
+  assert.match(code,/10_PerformanceMetrics/);
+  assert.match(metrics,/function ensurePerformanceMetricRowForSong_\(/);
+  assert.match(metrics,/function syncPerformanceMetricRows\(/);
+  assert.match(writer,/ensurePerformanceMetricRowForSong_\(ss,reservation\.issuedId\)/);
 });
