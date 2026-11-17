@@ -8,18 +8,11 @@ const root=path.resolve(import.meta.dirname,'..');
 const catalog=fs.readFileSync(path.join(root,'CatalogManagement.gs'),'utf8');
 const writer=fs.readFileSync(path.join(root,'UniverseService.gs'),'utf8');
 
-test('catalog is opt-in and rejects anonymous/unapproved users',()=>{
-  const sandbox={
-    result:[],
-    PropertiesService:{getScriptProperties:()=>({getProperty:(k)=>k==='UNIVERSE_CATALOG_ENABLED'?'false':''})},
-    Session:{getActiveUser:()=>({getEmail:()=>''})},
-    requireUniverseServiceUser_:()=>true
-  };
-  vm.runInNewContext(catalog+'\nresult.push((()=>{try{catalogRequireAdmin_({userId:"U001"});return "allowed";}catch(e){return e.message}})());',sandbox);
-  assert.match(sandbox.result[0],/有効化されていません/);
-  sandbox.PropertiesService={getScriptProperties:()=>({getProperty:(k)=>k==='UNIVERSE_CATALOG_ENABLED'?'true':'owner@example.com'})};
-  vm.runInNewContext('result.push((()=>{try{catalogRequireAdmin_({userId:"U001"});return "allowed";}catch(e){return e.message}})());',sandbox);
-  assert.match(sandbox.result[1],/管理操作できません/);
+test('catalog accepts all three Universe users without email, role or activation settings',()=>{
+ const env={PropertiesService:{getScriptProperties:()=>{throw Error('unexpected properties read');}},Session:{getActiveUser:()=>{throw Error('unexpected Google identity read');}},requireUniverseServiceUser_:uid=>{if(!['U001','U002','U003'].includes(uid))throw Error('利用ユーザー');}};
+ vm.createContext(env);vm.runInContext(catalog,env);
+ for(const userId of ['U001','U002','U003'])assert.equal(env.catalogRequireUser_({userId}),userId);
+ for(const userId of ['',null,'U999'])assert.throws(()=>env.catalogRequireUser_({userId}),/利用ユーザー/);
 });
 
 test('site writer keeps registry allocation and a lyricless opt-in',()=>{
@@ -52,7 +45,8 @@ test('songs have a deletion preview and no archive or restore action',()=>{
 });
 
 test('permanent deletion requires typed confirmation, external review and backup',()=>{
-  assert.match(catalog,/UNIVERSE_CATALOG_SONG_DELETE_ENABLED/);
+  assert.doesNotMatch(catalog,/UNIVERSE_CATALOG_SONG_DELETE_ENABLED/);
+  assert.match(catalog,/catalogRequireUser_/);
   assert.match(catalog,/externalReferencesChecked!==true/);
   assert.match(catalog,/confirmTitle/);
   assert.match(catalog,/UNIVERSE_CATALOG_BACKUP_ID/);
@@ -81,10 +75,10 @@ test('new BE:FIRST song creates only its missing performance-metrics row',()=>{
   assert.doesNotMatch(create,/syncPerformanceMetricRows\(ss, true\)/);
 });
 
-test('DB optimization audit is administrator gated and performs read-only checks',()=>{
+test('DB optimization audit validates a Universe user and performs read-only checks',()=>{
   const audit=fs.readFileSync(path.join(root,'CatalogDbAudit.gs'),'utf8');
   assert.match(audit,/function auditCatalogDatabaseForUniverse\(payload\)/);
-  assert.match(audit,/catalogRequireAdmin_\(payload\|\|\{\}\)/);
+  assert.match(audit,/catalogRequireUser_\(payload\|\|\{\}\)/);
   assert.match(audit,/ORPHAN_LYRICS/);
   assert.match(audit,/MISSING_METRICS/);
   assert.match(audit,/CREDIT_TITLE_DRIFT/);

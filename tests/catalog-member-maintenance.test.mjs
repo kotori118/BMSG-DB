@@ -37,7 +37,7 @@ function sandbox(){
   const env={
     clean_:(x)=>String(x??'').trim(),
     id_:(x)=>String(x??'').trim(),
-    catalogRequireAdmin_:()=> 'admin@example.com',
+    catalogRequireUser_:()=> 'admin@example.com',
     catalogRequireReady_:()=>{},
     catalogTable_:(_ss,name)=>table(name),
     catalogRow_:(t,key,id)=>t.rows.find(x=>String(x.values[t.map[key]])===id),
@@ -59,10 +59,11 @@ function sandbox(){
   return{data,audits,invoke};
 }
 
-test('member maintenance parses; deletes disabled independently',()=>{
+test('member maintenance requires a Universe user and preserves delete safeguards',()=>{
   assert.doesNotThrow(()=>new vm.Script(src));
-  assert.match(src,/UNIVERSE_CATALOG_MEMBER_MAINTENANCE_ENABLED/);
-  assert.match(src,/UNIVERSE_CATALOG_MEMBER_DELETE_ENABLED/);
+  assert.doesNotMatch(src,/UNIVERSE_CATALOG_MEMBER_MAINTENANCE_ENABLED/);
+  assert.match(src,/catalogRequireUser_/);
+  assert.doesNotMatch(src,/UNIVERSE_CATALOG_MEMBER_DELETE_ENABLED/);
   assert.match(src,/pfMgmtBackupGate_\(\)/);
   assert.match(src,/externalReferencesChecked!==true/);
   assert.match(src,/catalogMemberDeletePlan_/);

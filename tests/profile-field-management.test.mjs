@@ -7,9 +7,10 @@ import test from 'node:test';
 const root=path.resolve(import.meta.dirname,'..');
 const src=fs.readFileSync(path.join(root,'ProfileFieldManagement.gs'),'utf8');
 
-test('profile-field module parses and keeps writes behind opt-in + backups',()=>{
+test('profile-field module validates a user and preserves backup requirements',()=>{
   assert.doesNotThrow(()=>new vm.Script(src));
-  assert.match(src,/UNIVERSE_CATALOG_PROFILE_FIELDS_ENABLED/);
+  assert.doesNotMatch(src,/UNIVERSE_CATALOG_PROFILE_FIELDS_ENABLED/);
+  assert.match(src,/catalogRequireUser_/);
   assert.match(src,/UNIVERSE_CATALOG_BACKUP_ID/);
   assert.match(src,/UNIVERSE_CATALOG_LOG_BACKUP_ID/);
   assert.match(src,/reserveNumberForKey_\(ss,'NEXT_PROFILE_ID'/);
@@ -72,7 +73,7 @@ test('field hide / restore changes only ProfileSettings.IsActive and retains val
     clean_:(v)=>v==null?'':String(v).trim(),
     id_:(v)=>String(v).trim(),
     catalogRequiredString_:(v)=>String(v).trim(),
-    catalogRequireAdmin_:()=> 'admin@example.com',
+    catalogRequireUser_:()=> 'admin@example.com',
     catalogRequireReady_:()=>{},
     catalogTable_:(ss,name)=> name==='05_Profiles'?profile:settings,
     catalogRow_:(t,key,val)=>t.rows.find(r=>r.values[t.map[key]]===val),
@@ -162,7 +163,7 @@ test('field creation writes P016 to Core and Log without changing existing value
     const env={
       clean_:(v)=>v==null?'':String(v).trim(),
       id_:(v)=>String(v).trim(),
-      catalogRequireAdmin_:()=> 'admin@example.com',
+      catalogRequireUser_:()=> 'admin@example.com',
       catalogRequireReady_:()=>{},
       catalogRequiredString_:(v,name,max)=>{
         v=String(v||'').trim();if(!v||v.length>max)throw new Error(name);

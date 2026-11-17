@@ -5,7 +5,7 @@
  * ProfileSettings table in Log DB remains the sole field definition.
  * Hidden fields are kept intact and are reactivated by IsActive=true.
  *
- * This module is disabled until UNIVERSE_CATALOG_PROFILE_FIELDS_ENABLED=true.
+ * All selected Universe users can manage fields.
  * Creating a field additionally requires separately verified Core and Log
  * backups; neither backups nor schema are created automatically.
  */
@@ -16,10 +16,6 @@ const PF_MGMT_HEADERS_ = Object.freeze([
   'IsCompareTarget','QuizDifficulty','DisplayOrder','IsActive'
 ]);
 
-function pfMgmtFlag_() {
-  if(PropertiesService.getScriptProperties().getProperty('UNIVERSE_CATALOG_PROFILE_FIELDS_ENABLED')!=='true')
-    throw new Error('プロフィール項目管理はまだ有効化されていません。');
-}
 function pfMgmtActive_(value) {
   return value===true || /^(TRUE|1)$/i.test(clean_(value));
 }
@@ -79,7 +75,7 @@ function pfMgmtBootstrapRows_(state) {
 }
 /** Read-only. Independent from the create/toggle feature flag. */
 function getCatalogProfileFieldsForUniverse(payload) {
-  catalogRequireAdmin_(payload);
+  catalogRequireUser_(payload);
   const ss=openCoreSpreadsheet_();
   catalogRequireReady_(ss);
   const state=pfMgmtRequireShape_(ss);
@@ -108,8 +104,7 @@ function pfMgmtBackupGate_() {
  * values are touched. ProfileID is intentionally never recycled.
  */
 function createCatalogProfileFieldForUniverse(payload) {
-  const actor=catalogRequireAdmin_(payload);
-  pfMgmtFlag_();
+  const actor=catalogRequireUser_(payload);
   const data=pfMgmtPrepareInput_(payload);
   pfMgmtBackupGate_();
   return withSharedWriterLock_('プロフィール項目追加',function(){
@@ -188,8 +183,7 @@ function createCatalogProfileFieldForUniverse(payload) {
  * Existing Profile and Quiz readers already respect this flag.
  */
 function setCatalogProfileFieldActiveForUniverse(payload) {
-  const actor=catalogRequireAdmin_(payload);
-  pfMgmtFlag_();
+  const actor=catalogRequireUser_(payload);
   if(typeof payload.isActive!=='boolean'||typeof payload.expectedActive!=='boolean')
     throw new Error('変更前・変更後の状態を指定してください。');
   const id=id_(payload.profileId);

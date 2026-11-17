@@ -36,7 +36,7 @@ function fixture(){
     PropertiesService:{getScriptProperties:()=>({getProperty:k=>props[k]??null,setProperty:(k,v)=>{props[k]=v;}})},Session:{getActiveUser:()=>({getEmail:()=> 'admin@example.test'})},
     SpreadsheetApp:{openById:book,flush:()=>{}},DriveApp:{getFolderById:()=>({}),getFileById:id=>({getId:()=>id,getName:()=>id,makeCopy:(name)=>{const next='copy'+(++serial);data[next]=structuredClone(data[id]);files.push({id:next,name});return {getId:()=>next};}})},
     Utilities:{getUuid:()=>String(++serial),formatDate:()=> '20261117_000000',DigestAlgorithm:{SHA_256:'sha256'},computeDigest:(_,x)=>Array.from(crypto.createHash('sha256').update(x).digest()),base64EncodeWebSafe:x=>Buffer.from(x).toString('base64url')},
-    id_:x=>String(x??'').trim(),clean_:x=>String(x??'').trim(),normalizeHex_:x=>String(x).toUpperCase(),requireUniverseServiceUser_:uid=>{if(uid!=='U001')throw Error('user');},
+    id_:x=>String(x??'').trim(),clean_:x=>String(x??'').trim(),normalizeHex_:x=>String(x).toUpperCase(),requireUniverseServiceUser_:uid=>{if(!['U001','U002','U003'].includes(uid))throw Error('user');},
     openCoreSpreadsheet_:()=>book('core'),requireSheet_:(b,n)=>{const s=b.getSheetByName(n);if(!s)throw Error('Missing '+n);return s;},requireColumns_:(t,cols)=>{for(const c of cols)if(t.map[c]==null)throw Error('column '+c);},
     readTable_:s=>{const values=s.getDataRange().getValues(),header=values[0].map(String),map={};header.forEach((h,i)=>map[h]=i);return {sheet:s,header,map,rows:values.slice(1).map((v,i)=>({rowNumber:i+2,values:v})).filter(r=>r.values.some(v=>v!==''&&v!=null))};},
     appendStyledRow_:(s,v)=>{if(failAudit&&s.getName()==='CATALOG_Audit')throw Error('audit unavailable');const row=s.getLastRow()+1;s.getRange(row,1,1,v.length).setValues([v]);return row;},
@@ -171,4 +171,15 @@ test('restore rejects duplicate identities and dangling core references before w
  assert.throws(()=>x.call('restoreCatalogMasterDataForUniverse',{backupId:'backupCore0'}),/ID重複/);assert.equal(x.writes.length,0);
  const y=fixture();y.data.backupCore0.Links[1][1]='999';
  assert.throws(()=>y.call('restoreCatalogMasterDataForUniverse',{backupId:'backupCore0'}),/参照不整合/);assert.equal(y.writes.length,0);
+});
+
+test('all Universe users manage guests and groups without activation flags or Google roles',()=>{
+ for(const userId of ['U001','U002','U003']){
+  const x=fixture();Object.keys(x.props).filter(k=>k.includes('ENABLED')).forEach(k=>x.props[k]='false');delete x.props.UNIVERSE_CATALOG_ADMIN_EMAILS;
+  x.call('getCatalogMaintenanceBootstrapForUniverse',{userId});
+  x.call('maintainCatalogGuestForUniverse',{userId,guestId:'901',name:'Corrected',expectedRevision:x.revision('Guests','GuestID','901')});
+  x.call('maintainCatalogGroupForUniverse',{userId,groupId:'7',name:'Shared group',kind:'GROUP',color:'#abcdef',displayOrder:2,expectedRevision:x.revision('Groups','GroupID','7')});
+  assert.equal(x.tables.Guests[1][1],'Corrected');assert.equal(x.tables.Groups[2][1],'Shared group');
+  assert.equal(x.call('getCatalogManagementReadinessForUniverse',{userId}).ready,true);
+ }
 });

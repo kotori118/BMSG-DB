@@ -1,16 +1,12 @@
 /**
- * Optional admin-only member maintenance. Never invoked by legacy Sheet menus.
- * No production action happens until catalog schema, feature flag and site
- * administration are deployed and explicitly enabled.
+ * Shared member maintenance for registered Universe users. Never invoked by legacy Sheet menus.
+ * Catalog schema, backup, reference and confirmation checks are retained.
  *
  * MemberID is immutable. Main group changes keep existing member IDs and
  * synchronize only this member's 04_GroupMembers primary membership record.
  */
 function memberMaintenanceGate_(payload) {
-  const actor=catalogRequireAdmin_(payload);
-  if(PropertiesService.getScriptProperties().getProperty('UNIVERSE_CATALOG_MEMBER_MAINTENANCE_ENABLED')!=='true')
-    throw new Error('メンバーの所属・並び順管理はまだ有効化されていません。');
-  return actor;
+  return catalogRequireUser_(payload);
 }
 function memberMaintenanceCellWrite_(cell,value,undo) {
   const old=cell.getValue();
@@ -203,8 +199,6 @@ function getCatalogMemberDeletePreviewForUniverse(payload) {
 }
 function deleteCatalogMemberForUniverse(payload) {
   const actor=memberMaintenanceGate_(payload);
-  if(PropertiesService.getScriptProperties().getProperty('UNIVERSE_CATALOG_MEMBER_DELETE_ENABLED')!=='true')
-    throw new Error('メンバー削除は無効です。バックアップと依存関係の検証を完了してください。');
   const mid=id_(payload.memberId);
   if(!mid||id_(payload.confirm)!==mid||payload.externalReferencesChecked!==true)
     throw new Error('MemberIDと外部参照の確認が必要です。');

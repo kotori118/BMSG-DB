@@ -6,7 +6,7 @@ import test from 'node:test';
 
 const source=fs.readFileSync(path.join(import.meta.dirname,'..','CatalogUnitMembership.gs'),'utf8');
 
-function fixture({auditFails=false,admin=true,badOrder=false}={}){
+function fixture({auditFails=false,registered=true,badOrder=false}={}){
   const store={
     Groups:[
       ['GroupID','GroupName','GroupKind','RecordStatus'],
@@ -56,8 +56,8 @@ function fixture({auditFails=false,admin=true,badOrder=false}={}){
     BU1:{SHEETS:{GROUPS:'Groups',MEMBERS:'Members',GROUP_MEMBERS:'Links'}},
     clean_:(value)=>value==null?'':String(value).trim(),
     id_:(value)=>value==null?'':String(value).trim(),
-    catalogRequireAdmin_:()=>{
-      if(!admin)throw new Error('管理者権限がありません。');
+    catalogRequireUser_:()=>{
+      if(!registered)throw new Error('利用ユーザーが不正です。');
       return 'qa@example.com';
     },
     openCoreSpreadsheet_:()=>({}),
@@ -160,11 +160,11 @@ test('membership removal and reorder roll back when audit fails',()=>{
     assert.equal(JSON.stringify(x.store),before);
   }
 });
-test('non-admin cannot change UNIT links and boundary moves are no-ops',()=>{
-  const denied=fixture({admin:false}),before=JSON.stringify(denied.store);
+test('an unknown user cannot change UNIT links and boundary moves are no-ops',()=>{
+  const denied=fixture({registered:false}),before=JSON.stringify(denied.store);
   assert.throws(()=>denied.call('removeCatalogUnitMemberForUniverse',{
     groupId:'6',memberId:'102',expectedOrder:2
-  }),/管理者権限/);
+  }),/利用ユーザー/);
   assert.equal(JSON.stringify(denied.store),before);
   const x=fixture();
   const res=x.call('moveCatalogUnitMemberForUniverse',{

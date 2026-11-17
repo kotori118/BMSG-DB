@@ -19,3 +19,11 @@ CatalogMaintenance.gsに管理者限定のGuest訂正／参照統合／安全な
 CatalogMemberMaintenance.gsで02_Membersの順番と主所属04_GroupMembersの順番を同時更新、他ユニットは保持。ShowMinorSavageはGROUPの確定仕様を維持。
 
 新規25試験を含むNode74件・GAS14ファイル静的検査が成功。実Core／Log／Driveは変更せず、メモリ上fixtureで保存と途中失敗復旧を検証。本番／テストDB書込、既存Driveロゴ物理削除、GAS更新、library版発行、main merge、deployなし。PJ固定版14のため、このブランチだけで公開環境から新APIを呼べるとは扱わない。実GAS＋複製DB・iPhone確認は未実施。詳細と公開前・切り戻し手順はPJの既存QA第9節。
+
+
+## 追加確定：管理者設定廃止（2026-11-17）
+利用者の明示指示でU001／U002／U003全員へ全管理操作を開放。catalogRequireUser_は既存利用者リストのみを検証し、Googleメール・allowlist・有効化flagを読まない。個別のメンバー／項目／削除flagも撤去した。監査ActorEmail列は維持し新操作の選択UserIDを記録。既存ログは変更しない。旧入力停止のUNIVERSE_SITE_ONLY_WRITESだけを入力方法の設定として残す。
+
+read-only getCatalogManagementReadinessForUniverseでPJから初期schema状態を確認し、全ユーザーが明示確認のうえでサイトの初期整備に進める。起動時のmigrationなし。schema・採番・lock・参照／外部参照確認・backup・preview・rollbackは従来どおり。管理権限とGoogle Driveのファイル権限は別で、共有設定は変えない。
+
+新方針へテストを更新し、Node75件成功。3ユーザーのGuest／グループ編集・readiness、Googleメール／allowlistなしの受付、未知UserID拒否を確認。実GASでの初期整備・本番DB保存は未実施。過去の管理者限定・feature flag必須記載より本追記を優先する。
