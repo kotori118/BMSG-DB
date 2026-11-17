@@ -270,6 +270,7 @@ function createCatalogMemberForUniverse(payload){
     const res=reserveNumberForKey_(ss,'NEXT_MEMBER_ID_'+band,'BMSG-DB_SITE_CATALOG','サイトでMember作成: '+name);
     const rows=[];
     try{
+      if(Number(res.numericValue)>band+99)throw new Error('MemberIDの採番帯が上限に達しました: '+band+'〜'+(band+99));
       const display=m.rows.filter(r=>id_(r.values[m.map.GroupID])===groupId).length+1;
       const v=new Array(m.header.length).fill('');
       v[m.map.MemberID]=res.issuedId;v[m.map.GroupID]=groupId;v[m.map.DisplayName]=name;v[m.map.ColorHex]=color;v[m.map.DisplayOrder]=display;v[m.map.RecordStatus]='ACTIVE';
