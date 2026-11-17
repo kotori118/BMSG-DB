@@ -35,7 +35,7 @@
 | 画像登録・差し替え・整合修復 | 旧Driveカード同期 | ImageManagement → saveImageManagementImage / repairImageManagementData | 対応（既存サイト）。画像削除は未実装 |
 | 歌唱・センター秒数管理 | 10_PerformanceMetricsに直接値 | PerformanceTimer → savePerformanceTimer | 対応（既存サイト）、**10は維持** |
 | パート継承 | 11_PartTransfers | 開発版ANALYSISの参照除去済み | **廃止決定**。本番シートは移行後に削除 |
-| 12_Videos / 13_VideoSegments | 12は動画データあり、13は削除済み | 2リポジトリ内に直接参照が見つからない | 映像分析の別実装・参照は要調査 |
+| 12_Videos / 13_VideoSegments | 2026-11-17に両方バックアップ確認後削除済み（12の83件は別ファイル保管） | 管理機能として再導入しない | 動画分析はUniverseと分離。秒数計測10_PerformanceMetricsは維持 |
 
 ## コードで確認した重要な不整合
 
