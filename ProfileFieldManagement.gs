@@ -97,6 +97,9 @@ function pfMgmtBackupGate_() {
       throw new Error(pair[0]+' は独立したバックアップを指定してください。');
     const file=DriveApp.getFileById(value);
     if(!file||!file.getName())throw new Error('バックアップにアクセスできません: '+pair[0]);
+    const backup=SpreadsheetApp.openById(value);
+    const required=pair[0]==='UNIVERSE_CATALOG_BACKUP_ID'?BU1.SHEETS.PROFILES:PF_MGMT_SETTINGS_;
+    if(!backup.getSheetByName(required))throw new Error('バックアップに必要なタブがありません: '+required);
   });
 }
 /**
@@ -122,6 +125,7 @@ function createCatalogProfileFieldForUniverse(payload) {
     },-1);
     const reserved=reserveNumberForKey_(ss,'NEXT_PROFILE_ID','BMSG-DB_SITE_PROFILE_FIELDS','サイトから項目作成: '+data.name);
     let column=0,inserted=false,logRow=0;
+    const logLastBefore=log.getLastRow();
     try {
       if(reserved.numericValue>999)throw new Error('ProfileIDの上限P999に到達しました。');
       if(state.seen[reserved.issuedId]||state.profile.map[reserved.issuedId]!=null)
@@ -158,7 +162,15 @@ function createCatalogProfileFieldForUniverse(payload) {
       return {ok:true,profileId:reserved.issuedId};
     } catch(error){
       const rollbackErrors=[];
-      if(logRow)try{log.deleteRow(logRow);}catch(e){rollbackErrors.push('Log行: '+e.message);}
+      if(!logRow && log.getLastRow()>logLastBefore){
+        const r=logLastBefore+1;
+        if(id_(log.getRange(r,state.settings.map.ProfileID+1).getValue())===reserved.issuedId)logRow=r;
+      }
+      if(logRow)try{
+        if(id_(log.getRange(logRow,state.settings.map.ProfileID+1).getValue())===reserved.issuedId)
+          log.deleteRow(logRow);
+        else rollbackErrors.push('Log行: 他の項目へ変更されたため削除を止めました');
+      }catch(e){rollbackErrors.push('Log行: '+e.message);}
       if(column){
         try{
           if(inserted && column===p.getMaxColumns())p.deleteColumn(column);
