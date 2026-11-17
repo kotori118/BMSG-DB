@@ -305,14 +305,18 @@ function universeServiceRollbackError_(originalError, rollbackErrors) {
     : message);
 }
 
-function assertUniverseServiceArtist_(ss, artist) {
-  if (artist === 'UNIT') return;
+function universeServiceArtistRef_(ss, artist) {
+  if (artist === 'UNIT') return ''; // Pending artist resolution; never guess.
   const groups = readTable_(requireSheet_(ss, BU1.SHEETS.GROUPS));
   const members = readTable_(requireSheet_(ss, BU1.SHEETS.MEMBERS));
-  const groupOk = groups.rows.some(r => clean_(r.values[groups.map.GroupName]) === artist);
-  const memberOk = members.rows.some(r => clean_(r.values[members.map.DisplayName]) === artist);
-  if (!groupOk && !memberOk) throw new Error('ARTISTが登録済み候補にありません。');
+  const matches = groups.rows.filter(r => clean_(r.values[groups.map.GroupName]) === artist)
+    .map(r => id_(r.values[groups.map.GroupID]))
+    .concat(members.rows.filter(r => clean_(r.values[members.map.DisplayName]) === artist)
+      .map(r => id_(r.values[members.map.MemberID]))).filter(Boolean);
+  if (matches.length !== 1) throw new Error('ARTISTを一意のG/U/M IDへ紐付けできません: ' + artist);
+  return matches[0];
 }
+function assertUniverseServiceArtist_(ss, artist) { universeServiceArtistRef_(ss, artist); }
 
 
 function universeServiceSingerById_(ss) {
@@ -417,7 +421,7 @@ function createSongWithPartsCore_(ss, song, credits, parsedParts, context) {
   context = context || {};
   const songsSheet = requireSheet_(ss, BU1.SHEETS.SONGS);
   const songsTable = readTable_(songsSheet);
-  requireColumns_(songsTable, ['SongID','Title','Artist','ReleaseDate','Form','CDTitle','IsTitleTrack']);
+  requireColumns_(songsTable, ['SongID','Title','Artist','ArtistRef','ReleaseDate','Form','CDTitle','IsTitleTrack']);
   const duplicate = songsTable.rows.find(function(r){
     return clean_(r.values[songsTable.map.Title]) === song.title && clean_(r.values[songsTable.map.Artist]) === song.artist;
   });
@@ -436,6 +440,7 @@ function createSongWithPartsCore_(ss, song, credits, parsedParts, context) {
     songValues[songsTable.map.SongID] = reservation.issuedId;
     songValues[songsTable.map.Title] = song.title;
     songValues[songsTable.map.Artist] = song.artist;
+    songValues[songsTable.map.ArtistRef] = universeServiceArtistRef_(ss, song.artist);
     songValues[songsTable.map.ReleaseDate] = song.releaseDateValue;
     songValues[songsTable.map.Form] = song.form;
     songValues[songsTable.map.CDTitle] = song.cdTitle;
@@ -639,6 +644,7 @@ function assignSongIdToExistingRowCore_(ss, rowNumber, context) {
   let creditRow = 0;
   try {
     sheet.getRange(row.rowNumber, table.map.SongID + 1).setValue(reservation.issuedId);
+    if(table.map.ArtistRef!=null)sheet.getRange(row.rowNumber,table.map.ArtistRef+1).setValue(universeServiceArtistRef_(ss,song.artist));
     if (song.artist === 'BE:FIRST') {
       const creditsSheet = requireSheet_(ss, BU1.SHEETS.SONG_CREDITS);
       const creditsTable = readTable_(creditsSheet);
