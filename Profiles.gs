@@ -317,7 +317,7 @@ function applyProfileSyncPlan_(ss, plan) {
     });
   });
 
-  plan.deletes.slice().sort((a, b) => Number(b.memberId) - Number(a.memberId)).forEach(item => {
+  plan.deletes.slice().sort((a, b) => Number(String(b.memberId).replace(/^M/,'')) - Number(String(a.memberId).replace(/^M/,''))).forEach(item => {
     deleteUnreferencedMember_(ss, item.memberId);
   });
   keepThreeEmptyProfileColumns_(input);
