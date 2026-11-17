@@ -43,7 +43,7 @@ function fixture({profileValue='',lyricsRef=false,logRef=false,unitRef=false,fai
   const log={getSheets:()=>['Scores','IDRegistry'].map(n=>sh[n])};
   const env={
     id_:(v)=>String(v??'').trim(),clean_:(v)=>String(v??'').trim(),
-    catalogRequireAdmin_:()=> 'admin@example.com',
+    catalogRequireUser_:()=> 'admin@example.com',
     catalogRequireReady_:()=>{}, catalogActive_:()=>true,
     catalogTable_:(_ss,name)=>table(name),
     catalogRow_:(t,key,id)=>{

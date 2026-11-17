@@ -1,7 +1,7 @@
 /**
  * Site-only management of UNIT memberships in Core 04_GroupMembers.
  * Group/Member master tables and all other memberships remain untouched.
- * Uses the existing catalog administrator gate, shared writer lock and audit.
+ * Uses the existing Universe user selection, shared writer lock and audit.
  *
  * Removal clears only one membership row and compacts order within that UNIT.
  * No row is physically deleted: shifting rows could invalidate other references.
@@ -57,7 +57,7 @@ function catalogUnitMembershipRollback_(undo,error) {
 /** Move the selected member up or down within one UNIT. */
 function moveCatalogUnitMemberForUniverse(payload) {
   payload=payload||{};
-  const actor=catalogRequireAdmin_(payload);
+  const actor=catalogRequireUser_(payload);
   const groupId=id_(payload.groupId),memberId=id_(payload.memberId);
   const direction=clean_(payload.direction).toUpperCase();
   if(!groupId||!memberId||['UP','DOWN'].indexOf(direction)<0)
@@ -93,7 +93,7 @@ function moveCatalogUnitMemberForUniverse(payload) {
  */
 function removeCatalogUnitMemberForUniverse(payload) {
   payload=payload||{};
-  const actor=catalogRequireAdmin_(payload);
+  const actor=catalogRequireUser_(payload);
   const groupId=id_(payload.groupId),memberId=id_(payload.memberId);
   if(!groupId||!memberId)throw new Error('ユニットと所属解除するメンバーを指定してください。');
   return withSharedWriterLock_('ユニット所属の解除',function(){

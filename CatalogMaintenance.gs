@@ -59,13 +59,13 @@ function catalogMaintenanceReferences_(ss,kind,id,skip){
   });return blockers;
 }
 function getCatalogMaintenanceBootstrapForUniverse(payload){
-  catalogRequireAdmin_(payload);const ss=openCoreSpreadsheet_(),schema=catalogSchemaStatus_(ss);
+  catalogRequireUser_(payload);const ss=openCoreSpreadsheet_(),schema=catalogSchemaStatus_(ss);
   function rows(name,key){const t=catalogTable_(ss,name,[key]);return t.rows.filter(function(r){return id_(r.values[t.map[key]]);}).map(function(r){return Object.assign(catalogRec_(t,r),{revision:catalogRowRevision_(t,r)});});}
   let fields=[];if(schema.ready)fields=pfMgmtBootstrapRows_(pfMgmtRequireShape_(ss));
   return {ok:true,schema:schema,groups:rows(BU1.SHEETS.GROUPS,'GroupID'),guests:rows(BU1.SHEETS.GUESTS,'GuestID'),members:rows(BU1.SHEETS.MEMBERS,'MemberID'),images:rows(BU1.SHEETS.CARDS,'ImageID').filter(function(r){return String(r.TargetType).toLowerCase()==='member';}),fields:fields,backups:catalogBackupHistory_(),flags:catalogRuntimeFlags_()};
 }
 function maintainCatalogGuestForUniverse(payload){
-  const actor=catalogRequireAdmin_(payload),id=id_(payload.guestId);
+  const actor=catalogRequireUser_(payload),id=id_(payload.guestId);
   return withSharedWriterLock_('Guest管理',function(){
     const ss=openCoreSpreadsheet_();catalogRequireReady_(ss);const t=catalogTable_(ss,BU1.SHEETS.GUESTS,['GuestID','DisplayName']),row=catalogRow_(t,'GuestID',id);
     catalogExpectRevision_(t,row,payload.expectedRevision);
@@ -90,7 +90,7 @@ function maintainCatalogGuestForUniverse(payload){
   });
 }
 function updateCatalogProfileFieldForUniverse(payload){
-  const actor=catalogRequireAdmin_(payload);pfMgmtFlag_();
+  const actor=catalogRequireUser_(payload);
   return withSharedWriterLock_('プロフィール項目の編集',function(){
     const ss=openCoreSpreadsheet_();catalogRequireReady_(ss);const state=pfMgmtRequireShape_(ss),t=state.settings,row=catalogRow_(t,'ProfileID',payload.profileId);
     const current=pfMgmtBootstrapRows_(state).find(function(f){return f.profileId===id_(payload.profileId);});
@@ -102,7 +102,7 @@ function updateCatalogProfileFieldForUniverse(payload){
   });
 }
 function maintainCatalogGroupForUniverse(payload){
-  const actor=catalogRequireAdmin_(payload),id=id_(payload.groupId);
+  const actor=catalogRequireUser_(payload),id=id_(payload.groupId);
   return withSharedWriterLock_('グループ管理',function(){
     const ss=openCoreSpreadsheet_();catalogRequireReady_(ss);const t=catalogTable_(ss,BU1.SHEETS.GROUPS,['GroupID','GroupName','GroupKind','DisplayOrder','ColorHex']),row=catalogRow_(t,'GroupID',id),before=catalogRec_(t,row);
     catalogExpectRevision_(t,row,payload.expectedRevision);
@@ -131,7 +131,7 @@ function maintainCatalogGroupForUniverse(payload){
   });
 }
 function correctCatalogSongArtistForUniverse(payload){
-  const actor=catalogRequireAdmin_(payload),id=id_(payload.songId),artist=catalogRequiredString_(payload.artist,'アーティスト',120);
+  const actor=catalogRequireUser_(payload),id=id_(payload.songId),artist=catalogRequiredString_(payload.artist,'アーティスト',120);
   return withSharedWriterLock_('楽曲Artistの訂正',function(){
     const ss=openCoreSpreadsheet_();catalogRequireReady_(ss);assertUniverseServiceArtist_(ss,artist);
     const t=catalogTable_(ss,BU1.SHEETS.SONGS,['SongID','Artist','SongType','SoloMemberID']),row=catalogRow_(t,'SongID',id),before=catalogRec_(t,row);
@@ -157,7 +157,7 @@ function correctCatalogSongArtistForUniverse(payload){
   });
 }
 function maintainCatalogImageForUniverse(payload){
-  const actor=catalogRequireAdmin_(payload),id=id_(payload.imageId);
+  const actor=catalogRequireUser_(payload),id=id_(payload.imageId);
   return withSharedWriterLock_('メンバー画像の表示設定',function(){
     const ss=openCoreSpreadsheet_();catalogRequireReady_(ss);const t=catalogTable_(ss,BU1.SHEETS.CARDS,['ImageID','TargetType','TargetID','IsProfileMain','DisplayOrder']),row=catalogRow_(t,'ImageID',id),before=catalogRec_(t,row);
     if(String(before.TargetType).toLowerCase()!=='member')throw new Error('メンバー画像のみ管理できます。');catalogExpectRevision_(t,row,payload.expectedRevision);
@@ -176,7 +176,7 @@ function maintainCatalogImageForUniverse(payload){
   });
 }
 function getCatalogAuditHistoryForUniverse(payload){
-  catalogRequireAdmin_(payload);const sheet=SpreadsheetApp.openById(BU1.LOG_DB_ID).getSheetByName('CATALOG_Audit');
+  catalogRequireUser_(payload);const sheet=SpreadsheetApp.openById(BU1.LOG_DB_ID).getSheetByName('CATALOG_Audit');
   if(!sheet)return {ok:true,rows:[],nextOffset:null};const offset=Math.max(0,Number(payload.offset)||0),last=sheet.getLastRow()-offset;
   const start=Math.max(2,last-49);if(last<2)return {ok:true,rows:[],nextOffset:null};
   const header=sheet.getRange(1,1,1,sheet.getLastColumn()).getDisplayValues()[0];
@@ -187,7 +187,7 @@ function catalogBackupHistory_(){
   try{return JSON.parse(PropertiesService.getScriptProperties().getProperty('UNIVERSE_CATALOG_BACKUP_HISTORY')||'[]');}catch(e){throw new Error('バックアップ履歴が不正です。');}
 }
 function createCatalogBackupsForUniverse(payload){
-  const actor=catalogRequireAdmin_(payload);
+  const actor=catalogRequireUser_(payload);
   if(payload.confirm!=='CREATE_BACKUP')throw new Error('バックアップ作成の確認が必要です。');
   return withSharedWriterLock_('Core／Logバックアップ',function(){
     const folder=DriveApp.getFolderById('1YD-Df-gJPyes1fCRFYsOj5kL4YLidTyq'),stamp=Utilities.formatDate(new Date(),'Asia/Tokyo','yyyyMMdd_HHmmss'),copies=[];
@@ -201,7 +201,7 @@ function createCatalogBackupsForUniverse(payload){
 }
 /** Retire application logo records; source Drive files are not library-owned assets. */
 function retireCatalogLogosForUniverse(payload){
-  const actor=catalogRequireAdmin_(payload);
+  const actor=catalogRequireUser_(payload);
   if(payload.confirm!=='RETIRE_LOGOS')throw new Error('廃止ロゴの整理確認が必要です。');pfMgmtBackupGate_();
   return withSharedWriterLock_('廃止ロゴの整理',function(){
     const ss=openCoreSpreadsheet_(),t=catalogTable_(ss,BU1.SHEETS.CARDS,['ImageID','TargetType']);
@@ -211,7 +211,7 @@ function retireCatalogLogosForUniverse(payload){
   });
 }
 function prepareCatalogManagementForUniverse(payload){
-  catalogRequireAdmin_(payload);if(payload.confirm!=='PREPARE_MANAGEMENT')throw new Error('初期整備の確認が必要です。');
+  catalogRequireUser_(payload);if(payload.confirm!=='PREPARE_MANAGEMENT')throw new Error('初期整備の確認が必要です。');
   const backup=createCatalogBackupsForUniverse({userId:payload.userId,confirm:'CREATE_BACKUP'});
   const schema=migrateCatalogManagementSchemaForUniverse({userId:payload.userId,confirm:'MIGRATE_CATALOG_V1'});
   const logos=retireCatalogLogosForUniverse({userId:payload.userId,confirm:'RETIRE_LOGOS'});
@@ -229,7 +229,7 @@ function catalogRepairPlan_(ss){
   });return actions;
 }
 function repairCatalogDatabaseForUniverse(payload){
-  const actor=catalogRequireAdmin_(payload);
+  const actor=catalogRequireUser_(payload);
   return withSharedWriterLock_('管理データの修復',function(){
     const ss=openCoreSpreadsheet_();catalogRequireReady_(ss);const plan=catalogRepairPlan_(ss),revision=JSON.stringify(plan);
     if(payload.preview!==false)return {ok:true,plan:plan,revision:revision};
@@ -297,7 +297,7 @@ function catalogWriteMasterSnapshot_(snapshot){
   });SpreadsheetApp.flush();
 }
 function restoreCatalogMasterDataForUniverse(payload){
-  const actor=catalogRequireAdmin_(payload),entry=catalogBackupHistory_().find(function(b){return b.coreId===payload.backupId;});
+  const actor=catalogRequireUser_(payload),entry=catalogBackupHistory_().find(function(b){return b.coreId===payload.backupId;});
   if(!entry||entry.coreId===BU1.CORE_DB_ID||entry.logId===BU1.LOG_DB_ID)throw new Error('登録済みの独立したバックアップを選んでください。');
   if(payload.preview!==false){const plan=catalogRestorePlan_(entry);return {ok:true,backupId:entry.coreId,revision:plan.revision,counts:plan.counts};}
   if(payload.confirm!=='RESTORE_MASTER_DATA'||typeof payload.expectedRevision!=='string')throw new Error('復元確認が必要です。');
@@ -315,10 +315,10 @@ function restoreCatalogMasterDataForUniverse(payload){
     }catch(error){try{catalogWriteMasterSnapshot_(plan.current);}catch(rollback){throw new Error(error.message+'／復旧失敗: '+rollback.message);}throw error;}
   });
 }
-const CATALOG_RUNTIME_FLAGS_=Object.freeze(['UNIVERSE_SITE_ONLY_WRITES','UNIVERSE_CATALOG_PROFILE_FIELDS_ENABLED','UNIVERSE_CATALOG_MEMBER_MAINTENANCE_ENABLED','UNIVERSE_CATALOG_MEMBER_DELETE_ENABLED','UNIVERSE_CATALOG_SONG_DELETE_ENABLED']);
+const CATALOG_RUNTIME_FLAGS_=Object.freeze(['UNIVERSE_SITE_ONLY_WRITES']);
 function catalogRuntimeFlags_(){const props=PropertiesService.getScriptProperties(),out={};CATALOG_RUNTIME_FLAGS_.forEach(function(k){out[k]=props.getProperty(k)==='true';});return out;}
 function configureCatalogRuntimeForUniverse(payload){
-  const actor=catalogRequireAdmin_(payload);
+  const actor=catalogRequireUser_(payload);
   if(payload.confirm!=='CONFIGURE_MANAGEMENT'||!payload.flags||Object.keys(payload.flags).some(function(k){return !CATALOG_RUNTIME_FLAGS_.includes(k)||typeof payload.flags[k]!=='boolean';}))throw new Error('設定と実行確認を確認してください。');
   return withSharedWriterLock_('管理機能の設定',function(){
     const ss=openCoreSpreadsheet_();catalogRequireReady_(ss);pfMgmtBackupGate_();const props=PropertiesService.getScriptProperties(),before=catalogRuntimeFlags_();

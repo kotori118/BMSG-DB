@@ -1,11 +1,10 @@
 /**
  * Catalog management v1 (staged feature).
  * All mutations are performed by BMSG-DB, never by the client or a Sheets menu.
- * Opt-in: UNIVERSE_CATALOG_ENABLED=true and UNIVERSE_CATALOG_ADMIN_EMAILS
- * (comma-delimited Google Account addresses) in Script Properties.
- * Empty/unknown identity, missing schema, or missing opt-in fails CLOSED.
+ * All registered Universe users share management access.
+ * Unknown UserID and missing schema are still rejected.
  *
- * Migration is an explicit administrator action and does not run at startup.
+ * Migration is an explicit user-confirmed action and does not run at startup.
  */
 const BU_CATALOG_SCHEMA_ = Object.freeze({
   groups:['GroupKind','RecordStatus'],
@@ -22,18 +21,11 @@ const BU_CATALOG_SOLOS_ = Object.freeze({
   '1073':{title:'Chill with you',member:'SOTA'}
 });
 
-function catalogRequireAdmin_(payload) {
+/** Every selected Universe user can manage data; no Google administrator role. */
+function catalogRequireUser_(payload) {
   payload=payload||{};
   requireUniverseServiceUser_(payload.userId);
-  const props=PropertiesService.getScriptProperties();
-  if(props.getProperty('UNIVERSE_CATALOG_ENABLED')!=='true')
-    throw new Error('管理機能は有効化されていません。');
-  const email=String(Session.getActiveUser().getEmail()||'').trim().toLowerCase();
-  const allow=String(props.getProperty('UNIVERSE_CATALOG_ADMIN_EMAILS')||'')
-    .split(',').map(x=>x.trim().toLowerCase()).filter(Boolean);
-  if(!email||!allow.length||allow.indexOf(email)<0)
-    throw new Error('ログイン中のGoogleアカウントは管理操作できません。');
-  return email;
+  return String(payload.userId).trim();
 }
 
 function catalogTable_(ss,name,headers) {
@@ -128,7 +120,7 @@ function catalogSchemaStatus_(ss){
 }
 
 function getCatalogManagementBootstrapForUniverse(payload) {
-  catalogRequireAdmin_(payload);
+  catalogRequireUser_(payload);
   const ss=openCoreSpreadsheet_();
   const schema=catalogSchemaStatus_(ss);
   const groups=readTable_(requireSheet_(ss,BU1.SHEETS.GROUPS));
@@ -142,9 +134,9 @@ function getCatalogManagementBootstrapForUniverse(payload) {
     memberships:gm.rows.filter(r=>id_(r.values[gm.map.MemberID])).map(r=>catalogRec_(gm,r))};
 }
 
-/** Explicit one-time schema migration; requires an admin-owned backup before execution. */
+/** Explicit one-time schema migration; requires a verified separate backup before execution. */
 function migrateCatalogManagementSchemaForUniverse(payload){
-  const actor=catalogRequireAdmin_(payload);
+  const actor=catalogRequireUser_(payload);
   if(String(payload.confirm||'')!=='MIGRATE_CATALOG_V1')throw new Error('移行確認コードが必要です。');
   const backup=String(PropertiesService.getScriptProperties().getProperty('UNIVERSE_CATALOG_BACKUP_ID')||'').trim();
   if(!backup||backup===BU1.CORE_DB_ID)throw new Error('別ファイルに作成したCore DBバックアップのIDを設定してください。');
@@ -261,7 +253,7 @@ function catalogValidateChangedColor_(ss,proposed,previous,kind,id) {
 }
 
 function createCatalogGroupForUniverse(payload){
-  const actor=catalogRequireAdmin_(payload);
+  const actor=catalogRequireUser_(payload);
   const name=catalogRequiredString_(payload.name,'グループ名',100);
   const kind=clean_(payload.kind).toUpperCase();
   if(['GROUP','UNIT'].indexOf(kind)<0)throw new Error('GROUP/UNITを選択してください。');
@@ -293,7 +285,7 @@ function createCatalogGroupForUniverse(payload){
 }
 
 function updateCatalogGroupForUniverse(payload){
-  const actor=catalogRequireAdmin_(payload),gid=id_(payload.groupId);
+  const actor=catalogRequireUser_(payload),gid=id_(payload.groupId);
   return withSharedWriterLock_('グループ編集',function(){
     const ss=openCoreSpreadsheet_();catalogRequireReady_(ss);
     const t=catalogTable_(ss,BU1.SHEETS.GROUPS,['GroupID','GroupName','ColorHex','GroupKind','RecordStatus']);
@@ -309,7 +301,7 @@ function updateCatalogGroupForUniverse(payload){
 }
 
 function createCatalogMemberForUniverse(payload){
-  const actor=catalogRequireAdmin_(payload),name=catalogRequiredString_(payload.name,'メンバー名',120);
+  const actor=catalogRequireUser_(payload),name=catalogRequiredString_(payload.name,'メンバー名',120);
   const groupId=id_(payload.primaryGroupId),color=normalizeHex_(payload.color||'#777777');
   return withSharedWriterLock_('メンバー作成',function(){
     const ss=openCoreSpreadsheet_();catalogRequireReady_(ss);
@@ -359,7 +351,7 @@ function createCatalogMemberForUniverse(payload){
 }
 
 function updateCatalogMemberForUniverse(payload){
-  const actor=catalogRequireAdmin_(payload),memberId=id_(payload.memberId);
+  const actor=catalogRequireUser_(payload),memberId=id_(payload.memberId);
   return withSharedWriterLock_('メンバー更新',function(){
     const ss=openCoreSpreadsheet_();catalogRequireReady_(ss);
     const t=catalogTable_(ss,BU1.SHEETS.MEMBERS,['MemberID','DisplayName','ColorHex','RecordStatus']);
@@ -371,7 +363,7 @@ function updateCatalogMemberForUniverse(payload){
 }
 
 function addCatalogUnitMemberForUniverse(payload){
-  const actor=catalogRequireAdmin_(payload),groupId=id_(payload.groupId),memberId=id_(payload.memberId);
+  const actor=catalogRequireUser_(payload),groupId=id_(payload.groupId),memberId=id_(payload.memberId);
   return withSharedWriterLock_('ユニット所属追加',function(){
     const ss=openCoreSpreadsheet_();catalogRequireReady_(ss);
     const groups=catalogTable_(ss,BU1.SHEETS.GROUPS,['GroupID','GroupKind','RecordStatus']);
@@ -396,7 +388,7 @@ function addCatalogUnitMemberForUniverse(payload){
 }
 
 function saveCatalogSoloForUniverse(payload){
-  const actor=catalogRequireAdmin_(payload),songId=id_(payload.songId);
+  const actor=catalogRequireUser_(payload),songId=id_(payload.songId);
   const songType=clean_(payload.songType||'NORMAL').toUpperCase();
   if(['NORMAL','SOLO'].indexOf(songType)<0)throw new Error('NORMAL/SOLOのみ対応します。');
   return withSharedWriterLock_('楽曲分類更新',function(){
@@ -473,19 +465,17 @@ function catalogSongDeletePlan_(ss,songId) {
     blockers:blockers,canDelete:blockers.length===0,rows:rows};
 }
 function getCatalogSongDeletePreviewForUniverse(payload) {
-  catalogRequireAdmin_(payload);
+  catalogRequireUser_(payload);
   const ss=openCoreSpreadsheet_();catalogRequireReady_(ss);
   const plan=catalogSongDeletePlan_(ss,id_(payload.songId));
   return {ok:true,songId:plan.songId,title:plan.title,
     counts:plan.counts,blockers:plan.blockers,canDelete:plan.canDelete};
 }
 function deleteCatalogSongForUniverse(payload) {
-  const actor=catalogRequireAdmin_(payload),songId=id_(payload.songId);
+  const actor=catalogRequireUser_(payload),songId=id_(payload.songId);
   if(!songId||id_(payload.confirm)!==songId||payload.externalReferencesChecked!==true)
     throw new Error('削除する曲のSongIDと、外部参照の確認が必要です。');
   const props=PropertiesService.getScriptProperties();
-  if(props.getProperty('UNIVERSE_CATALOG_SONG_DELETE_ENABLED')!=='true')
-    throw new Error('完全削除は現在無効です。管理者による有効化とバックアップ確認が必要です。');
   const backup=clean_(props.getProperty('UNIVERSE_CATALOG_BACKUP_ID'));
   if(!backup||backup===BU1.CORE_DB_ID)throw new Error('別ファイルのCore DBバックアップを設定してください。');
   if(!DriveApp.getFileById(backup).getName())throw new Error('バックアップを確認できません。');
@@ -527,7 +517,7 @@ function deleteCatalogSongForUniverse(payload) {
 
 /** Safe lyricless registration through the SAME core writer and IDRegistry. */
 function createCatalogSongDraftForUniverse(payload){
-  const actor=catalogRequireAdmin_(payload);
+  const actor=catalogRequireUser_(payload);
   const song=normalizeUniverseServiceSong_(payload.song||{});
   const credits=normalizeUniverseServiceCredits_(payload.credits||{});
   const type=clean_(payload.songType||'NORMAL').toUpperCase();
@@ -556,8 +546,14 @@ function createCatalogSongDraftForUniverse(payload){
     });
     if(result&&result.ok){
       try{catalogAudit_('SONG',result.songId,payload.includeLyrics===true?'CREATE_WITH_LYRICS':'CREATE_NO_LYRICS',null,{title:song.title,artist:song.artist,songType:type,soloMemberId:solo},actor);}
-      catch(e){throw new Error('楽曲は登録済みですが監査ログの保存に失敗しました（重複登録せず管理者へ連絡）: '+e.message);}
+      catch(e){throw new Error('楽曲は登録済みですが監査ログの保存に失敗しました（重複登録せず変更履歴を確認）: '+e.message);}
     }
     return result;
   });
+}
+
+/** Readiness only: every Universe user can open initial setup without role settings. */
+function getCatalogManagementReadinessForUniverse(payload) {
+  catalogRequireUser_(payload);
+  return catalogSchemaStatus_(openCoreSpreadsheet_());
 }

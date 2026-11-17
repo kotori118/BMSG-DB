@@ -6,7 +6,7 @@
  * Must be called only through the gated site Catalog API.
  */
 function auditCatalogDatabaseForUniverse(payload) {
-  catalogRequireAdmin_(payload||{});
+  catalogRequireUser_(payload||{});
   const ss=openCoreSpreadsheet_();
   const groups=catalogTable_(ss,BU1.SHEETS.GROUPS,['GroupID','GroupName']);
   const members=catalogTable_(ss,BU1.SHEETS.MEMBERS,['MemberID','GroupID','DisplayName']);
