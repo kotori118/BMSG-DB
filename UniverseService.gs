@@ -424,12 +424,14 @@ function createSongWithPartsCore_(ss, song, credits, parsedParts, context) {
   if (duplicate) return {ok:false, duplicate:true, songId:id_(duplicate.values[songsTable.map.SongID]), title:song.title, artist:song.artist};
   assertUniverseServiceArtist_(ss, song.artist);
   const parts = Array.isArray(parsedParts) ? parsedParts : [];
-  if (!parts.length) throw new Error('歌詞パートがありません。');
+  if (!parts.length && !context.allowEmptyParts) throw new Error('歌詞パートがありません。');
 
   const band = BU1.SONG_BANDS[song.artist] || BU1.SONG_BANDS.DEFAULT;
   const reservation = reserveNumberForKey_(ss, 'NEXT_SONG_ID_' + band, context.source || 'BMSG-DB', (context.notePrefix || '新規曲') + ': ' + song.title);
   const rollback = [];
   try {
+    if(Number(reservation.numericValue)>band+999)
+      throw new Error('SongIDの採番帯が上限に達しました: '+band+'〜'+(band+999));
     const songValues = new Array(songsTable.header.length).fill('');
     songValues[songsTable.map.SongID] = reservation.issuedId;
     songValues[songsTable.map.Title] = song.title;
@@ -438,6 +440,8 @@ function createSongWithPartsCore_(ss, song, credits, parsedParts, context) {
     songValues[songsTable.map.Form] = song.form;
     songValues[songsTable.map.CDTitle] = song.cdTitle;
     songValues[songsTable.map.IsTitleTrack] = song.isTitleTrack;
+    if (songsTable.map.SongType != null) songValues[songsTable.map.SongType] = context.songType || 'NORMAL';
+    if (songsTable.map.SoloMemberID != null) songValues[songsTable.map.SoloMemberID] = context.soloMemberId || '';
     rollback.push({sheet:songsSheet,row:appendStyledRow_(songsSheet, songValues)});
 
     let creditsSheet = null;
@@ -470,7 +474,10 @@ function createSongWithPartsCore_(ss, song, credits, parsedParts, context) {
       rollback.push({sheet:partsSheet,row:appendStyledRow_(partsSheet, values)});
     });
 
-    if (song.artist === 'BE:FIRST') syncPerformanceMetricRows(ss, true);
+    if (song.artist === 'BE:FIRST') {
+      const metric=ensurePerformanceMetricRowForSong_(ss,reservation.issuedId);
+      if(metric.created)rollback.push({sheet:metric.sheet,row:metric.row});
+    }
     SpreadsheetApp.flush();
     const verifySongs = readTable_(songsSheet).rows.filter(function(r){ return id_(r.values[songsTable.map.SongID]) === reservation.issuedId; });
     const verifyPartsTable = readTable_(partsSheet);
@@ -592,6 +599,7 @@ function getLegacyDirectMastersPlan_() {
 
 
 function commitLegacyDirectMasters_() {
+  blockLegacySheetWrite_('旧シート楽曲登録');
   return withSharedWriterLock_('Guest・楽曲同期', function(){
     const ss = openCoreSpreadsheet_();
     const plan = getLegacyDirectMastersPlan_();
@@ -665,6 +673,7 @@ function assignSongIdToExistingRowCore_(ss, rowNumber, context) {
 }
 
 function commitLegacyLyricsInputForSharedWriter_(payload) {
+  blockLegacySheetWrite_('旧シート歌詞登録');
   payload = payload || {};
   const raw = String(payload.raw || '');
   const metaInput = payload.metaInput || {};

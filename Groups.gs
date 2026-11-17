@@ -1,5 +1,6 @@
 /** 入力_所属 → 01_Groups / 04_GroupMembers */
 function confirmAndSyncMemberships() {
+  blockLegacySheetWrite_('旧所属同期');
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   withDocumentLock_('所属同期', function () {
     const plan = buildMembershipPlan_(ss);

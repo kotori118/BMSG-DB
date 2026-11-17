@@ -16,7 +16,7 @@ const BU1 = Object.freeze({
     GUESTS: '03_Guests', GROUP_MEMBERS: '04_GroupMembers',
     PROFILES: '05_Profiles', SONGS: '06_Songs', SONG_CREDITS: '07_SongCredits',
     LYRICS_PARTS: '08_LyricsParts', CARDS: '09_Images',
-    METRICS: '10_PerformanceMetrics', TRANSFERS: '11_PartTransfers',
+    METRICS: '10_PerformanceMetrics',
   }),
   COLORS: Object.freeze({ INPUT: '#FFF9D6', AUTO: '#EFEFEF', ERROR: '#F4CCCC' }),
   CARD_RARITIES: Object.freeze(['SSR', 'SR', 'R', 'N']),
@@ -35,26 +35,38 @@ const BU_ID_REGISTRY_HEADERS_ = Object.freeze([
   'EntityType','Scope','IssuedID','NumericValue','Status','RequestID','Source','IssuedAt','UpdatedAt','Note'
 ]);
 
+/**
+ * Cutover flag, OFF by default. This does not protect direct manual edits to
+ * Google Sheets: access controls must be migrated separately.
+ */
+function siteOnlyDbWritesEnabled_() {
+  return PropertiesService.getScriptProperties().getProperty('UNIVERSE_SITE_ONLY_WRITES')==='true';
+}
+function blockLegacySheetWrite_(operation) {
+  if(siteOnlyDbWritesEnabled_())
+    throw new Error((operation||'旧シート操作')+'は廃止されました。Universeサイトの管理画面から操作してください。');
+}
 function onOpen() {
-  SpreadsheetApp.getUi().createMenu('BMSG Universe')
-    .addItem('プロフィール｜変更を確認・反映', 'confirmAndSyncProfiles')
-    .addSeparator()
-    .addItem('所属・グループ｜変更を確認・反映', 'confirmAndSyncMemberships')
-    .addItem('Guest・楽曲｜新規登録を確認', 'confirmAndSyncDirectMasters')
-    .addSeparator()
-    .addItem('歌詞｜解析（プレビュー）', 'previewLyricsInput')
-    .addItem('歌詞｜解析結果を登録', 'commitLyricsInput')
-    .addSeparator()
-    .addItem('全体｜構成を検証', 'validateUniverseStructure')
-    .addToUi();
-  try { ensureLyricsInputLayout_(); } catch (err) { console.error(err); }
+  const menu=SpreadsheetApp.getUi().createMenu('BMSG Universe');
+  if(!siteOnlyDbWritesEnabled_()) {
+    menu.addItem('プロフィール｜変更を確認・反映','confirmAndSyncProfiles')
+      .addSeparator()
+      .addItem('所属・グループ｜変更を確認・反映','confirmAndSyncMemberships')
+      .addItem('Guest・楽曲｜新規登録を確認','confirmAndSyncDirectMasters')
+      .addSeparator()
+      .addItem('歌詞｜解析（プレビュー）','previewLyricsInput')
+      .addItem('歌詞｜解析結果を登録','commitLyricsInput')
+      .addSeparator();
+    try { ensureLyricsInputLayout_(); } catch(err) { console.error(err); }
+  }
+  menu.addItem('全体｜構成を検証','validateUniverseStructure').addToUi();
 }
 
 function onInstall(e) { onOpen(e); }
 
 function validateUniverseStructure() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
-  const required = Object.keys(BU1.SHEETS).map(k => BU1.SHEETS[k]);
+  const required = Object.keys(BU1.SHEETS).filter(k => !siteOnlyDbWritesEnabled_() || (k !== 'GUIDE' && !/^INPUT_/.test(k))).map(k => BU1.SHEETS[k]);
   const errors = required.filter(name => !ss.getSheetByName(name))
     .map(name => '不足シート: ' + name);
   errors.push.apply(errors, validateRequiredHeaders_(ss));
@@ -77,7 +89,6 @@ function validateRequiredHeaders_(ss) {
   defs[BU1.SHEETS.SONG_CREDITS] = ['SongID', 'Title', 'Lyricists', 'Composers', 'Choreographers'];
   defs[BU1.SHEETS.LYRICS_PARTS] = ['SongID', 'PartOrder', 'Singer', 'Lyrics'];
   defs[BU1.SHEETS.CARDS] = ['ImageID', 'TargetType', 'TargetID', 'Rarity', 'DriveFileID', 'DisplayOrder', 'IsProfileMain'];
-  defs[BU1.SHEETS.TRANSFERS] = ['TransferID', 'SongID', 'PartOrder', 'FromMemberID', 'ToMemberID', 'TransferGroup'];
   const errors = [];
   Object.keys(defs).forEach(name => {
     const sheet = ss.getSheetByName(name);
@@ -91,7 +102,7 @@ function validateRequiredHeaders_(ss) {
 function validateUniqueIds_(ss) {
   const targets = [[BU1.SHEETS.GROUPS, 'GroupID'], [BU1.SHEETS.MEMBERS, 'MemberID'],
     [BU1.SHEETS.GUESTS, 'GuestID'], [BU1.SHEETS.SONGS, 'SongID'],
-    [BU1.SHEETS.CARDS, 'ImageID'], [BU1.SHEETS.TRANSFERS, 'TransferID']];
+    [BU1.SHEETS.CARDS, 'ImageID']];
   const errors = [];
   targets.forEach(t => {
     const table = readTable_(requireSheet_(ss, t[0]));
@@ -212,7 +223,6 @@ function resolveIssueSpec_(ss, key) {
     return { entity:'PROFILE', scope:'GLOBAL', liveMax:maxProfileNumber_(ss), formatter:function(n){ return 'P' + padNumber_(n, 3); } };
   }
   if (key === 'NEXT_IMAGE_ID') throw new Error('ImageIDはBMSG-PJの画像管理だけが発行します。');
-  if (key === 'NEXT_TRANSFER_ID') throw new Error('11_PartTransfersは完全手動管理です。TransferIDは自動採番しません。');
   throw new Error('未対応の採番キーです: ' + key);
 }
 

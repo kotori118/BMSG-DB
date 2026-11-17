@@ -14,6 +14,7 @@ function syncCardsOnAccessSafe_() {
 }
 
 function syncCardsOnAccess_() {
+  blockLegacySheetWrite_('旧カード画像修復');
   const lock = LockService.getDocumentLock();
   if (!lock || !lock.tryLock(3000)) return { ok: true, skipped: true, updated: 0, warnings: 0 };
   try {

@@ -1,4 +1,30 @@
+
+/**
+ * New-song writer only: append a single metrics row instead of clearing and
+ * rebuilding the entire two-header performance table.
+ * Calling code already holds withSharedWriterLock_.
+ * Returns the newly appended row for writer rollback, or null if present.
+ */
+function ensurePerformanceMetricRowForSong_(ss, songId) {
+  const sheet=requireSheet_(ss,BU1.SHEETS.METRICS);
+  const id=id_(songId);
+  if(!id)throw new Error('秒数行のSongIDがありません。');
+  const last=sheet.getLastRow();
+  const ids=last>=3?sheet.getRange(3,1,last-2,1).getValues():[];
+  const found=[];
+  ids.forEach(function(row,index){if(id_(row[0])===id)found.push(index+3);});
+  if(found.length>1)throw new Error('10_PerformanceMetricsにSongID重複: '+id);
+  if(found.length===1)return {created:false,row:found[0]};
+  const cols=Math.max(13,sheet.getLastColumn());
+  const vals=new Array(cols).fill('');
+  vals[0]=id;
+  const added=appendStyledRow_(sheet,vals);
+  if(id_(sheet.getRange(added,1).getValue())!==id)throw new Error('秒数行の保存照合に失敗しました: '+id);
+  return {created:true,row:added,sheet:sheet};
+}
+
 function syncPerformanceMetricRows(optionalSs, silent) {
+  blockLegacySheetWrite_('秒数表の旧全表同期');
   const ss = optionalSs && optionalSs.getSheets ? optionalSs : SpreadsheetApp.getActiveSpreadsheet();
   const sheet = requireSheet_(ss, BU1.SHEETS.METRICS), songs = readTable_(requireSheet_(ss, BU1.SHEETS.SONGS));
   const target = songs.rows.filter(r => clean_(r.values[songs.map.Artist]) === 'BE:FIRST');
@@ -9,36 +35,3 @@ function syncPerformanceMetricRows(optionalSs, silent) {
   if (!silent) alert_('秒数表同期', 'BE:FIRST ' + rows.length + '曲の行を同期しました。');
 }
 
-/**
- * 11_PartTransfers は完全手動管理。
- * この処理は必須値と重複だけを確認し、TransferIDを採番・変更しない。
- */
-function confirmAndSyncPartTransfers() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet();
-  withDocumentLock_('パート移行確認', function () {
-    const t = readTable_(requireSheet_(ss, BU1.SHEETS.TRANSFERS));
-    requireColumns_(t, ['TransferID', 'SongID', 'PartOrder', 'FromMemberID', 'ToMemberID', 'TransferGroup']);
-    const errors = [];
-    const seen = {};
-    t.rows.forEach(r => {
-      if (!r.values.some(v => clean_(v))) return;
-      const transferId = id_(r.values[t.map.TransferID]);
-      const songId = id_(r.values[t.map.SongID]);
-      const partOrder = id_(r.values[t.map.PartOrder]);
-      const fromId = id_(r.values[t.map.FromMemberID]);
-      const toId = id_(r.values[t.map.ToMemberID]);
-      if (!transferId || !songId || !partOrder || !fromId || !toId) errors.push(r.rowNumber + '行目: 必須値が不足しています');
-      if (transferId) {
-        if (seen[transferId]) errors.push('TransferIDが重複しています: ' + transferId);
-        seen[transferId] = true;
-      }
-    });
-    alert_('パート移行確認', errors.length ? errors.join('\n') : '11_PartTransfers に入力上の問題はありません。自動変更は行っていません。');
-  });
-}
-
-function deleteSelectedPartTransfer() {
-  const ss = SpreadsheetApp.getActiveSpreadsheet(), sheet = ss.getActiveSheet();
-  if (sheet.getName() !== BU1.SHEETS.TRANSFERS || sheet.getActiveRange().getRow() < 2) { alert_('削除', '11_PartTransfersの対象行を選択してください。'); return; }
-  if (confirm_('パート移行を削除', sheet.getActiveRange().getRow() + '行目を削除しますか？')) sheet.deleteRow(sheet.getActiveRange().getRow());
-}
