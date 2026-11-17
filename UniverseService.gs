@@ -430,6 +430,8 @@ function createSongWithPartsCore_(ss, song, credits, parsedParts, context) {
   const reservation = reserveNumberForKey_(ss, 'NEXT_SONG_ID_' + band, context.source || 'BMSG-DB', (context.notePrefix || '新規曲') + ': ' + song.title);
   const rollback = [];
   try {
+    if(Number(reservation.numericValue)>band+999)
+      throw new Error('SongIDの採番帯が上限に達しました: '+band+'〜'+(band+999));
     const songValues = new Array(songsTable.header.length).fill('');
     songValues[songsTable.map.SongID] = reservation.issuedId;
     songValues[songsTable.map.Title] = song.title;
