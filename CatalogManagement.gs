@@ -116,7 +116,14 @@ function catalogSchemaStatus_(ss){
     const present=sheet.getRange(1,1,1,Math.max(1,sheet.getLastColumn())).getDisplayValues()[0];
     headers.filter(k=>present.indexOf(k)<0).forEach(k=>missing.push(name+'.'+k));
   });
-  if(!SpreadsheetApp.openById(BU1.LOG_DB_ID).getSheetByName('CATALOG_Audit'))missing.push('Log.CATALOG_Audit');
+  const audit=SpreadsheetApp.openById(BU1.LOG_DB_ID).getSheetByName('CATALOG_Audit');
+  if(!audit)missing.push('Log.CATALOG_Audit');
+  else {
+    const actual=audit.getRange(1,1,1,Math.max(1,audit.getLastColumn())).getDisplayValues()[0];
+    ['AuditID','EntityType','EntityID','Action','BeforeJSON','AfterJSON','ActorEmail','OccurredAt','Source']
+      .filter(function(k){return actual.indexOf(k)<0;})
+      .forEach(function(k){missing.push('Log.CATALOG_Audit.'+k);});
+  }
   return {ready:missing.length===0,missing};
 }
 
@@ -146,6 +153,13 @@ function migrateCatalogManagementSchemaForUniverse(payload){
   return withSharedWriterLock_('カタログスキーマ移行',function(){
     const ss=openCoreSpreadsheet_();
     if(catalogSchemaStatus_(ss).ready)return {ok:true,alreadyReady:true};
+    const existingAudit=SpreadsheetApp.openById(BU1.LOG_DB_ID).getSheetByName('CATALOG_Audit');
+    if(existingAudit) {
+      const h=existingAudit.getRange(1,1,1,Math.max(1,existingAudit.getLastColumn())).getDisplayValues()[0];
+      const required=['AuditID','EntityType','EntityID','Action','BeforeJSON','AfterJSON','ActorEmail','OccurredAt','Source'];
+      if(required.some(function(k){return h.indexOf(k)<0;}))
+        throw new Error('既存CATALOG_Auditの列構造に不整合があります。スキーマ変更は中止しました。');
+    }
     const specs=[
       [BU1.SHEETS.GROUPS,BU_CATALOG_SCHEMA_.groups],
       [BU1.SHEETS.MEMBERS,BU_CATALOG_SCHEMA_.members],
