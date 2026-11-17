@@ -158,3 +158,25 @@ test('song edits cannot change artist or use unknown UserID',()=>{
   }}),/ARTISTは変更/);
   assert.throws(()=>x.call('saveSongCreditsForUniverse',{userId:'invalid',songId:'1099',credits:{}}),/利用ユーザー/);
 });
+
+test('real lyrics parser resolves named singers and preserves parenthesized lyric lines',()=>{
+  const lyricsSource=fs.readFileSync(path.join(import.meta.dirname,'..','Lyrics.gs'),'utf8');
+  const x=makeFixture();
+  vm.runInContext(lyricsSource,x.ctx);
+  const masters={
+    byName:{
+      SOTA:[{id:'101',name:'SOTA'}],
+      SHUNTO:[{id:'102',name:'SHUNTO'}]
+    }
+  };
+  x.ctx.loadLyricsSingers_=()=>masters;
+  x.ctx.findUnknownLyricsGuestCandidates_=()=>[];
+  const raw='SOTA\nFIRST QA LINE\n(KEEP THIS LYRIC)\n\nSHUNTO\nSECOND QA LINE';
+  const parsed=x.call('parseSongLyricsForUniverse',{userId:'U001',rawLyrics:raw});
+  assert.equal(parsed.canRegister,true);
+  assert.equal(parsed.parts.length,2);
+  assert.deepEqual(Array.from(parsed.parts.map(p=>p.singer)),['101','102']);
+  assert.match(parsed.parts[0].lyrics,/KEEP THIS LYRIC/);
+  assert.equal(parsed.parts[1].lyrics,'SECOND QA LINE');
+  assert.equal(Object.hasOwn(x.sheets,'入力_歌詞'),false);
+});
