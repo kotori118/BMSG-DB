@@ -59,8 +59,17 @@
 | P1 | グループ/メンバーの安全な削除、Guest/画像削除の必要性 | 利用要件と参照関係を整理してから実装。不要なら作らない |
 | P2 | 旧手入力タブ・移行資料の引退 | P0がすべて合格し、別ファイルバックアップと本番回帰試験が済んでから |
 
+## P0-1 実装状況（2026-11-17追記）
+
+開発ブランチにプロフィール項目の**追加・非表示・再表示**を実装済み。
+- DB側：`ProfileFieldManagement.gs`。共通IDRegistry（NEXT_PROFILE_ID）、Core 05_ProfilesとLog ProfileSettingsの整合チェック、管理者認証、追加時の両DBバックアップ確認、失敗時ロールバック、監査ログ。
+- サイト側：`CatalogManagement.html`に「プロフィール項目」タブ、`CatalogManagementApi.gs`にBMSG-DB Writerへの中継APIを追加。既存プロフィールの値編集UIは変更なし。
+- 非表示は `ProfileSettings.IsActive` の変更のみで、既存の値・ProfileID・列は保持。`P000`は非表示禁止。
+- GASソース検査・Nodeテストの開発版検証を用意。Apps Script実DBでの操作・iPhone Safari・既存クイズ動作は未検証。
+- **本番未反映／旧シート未廃止／別の未完了操作は残存**。詳細：`docs/UNIVERSE_PROFILE_FIELD_MANAGEMENT_2026-11-17.md`。
+
 ## 作業境界と次のステップ
 
-- 次に実装着手する推奨対象は **P0-1 プロフィール項目管理**。現行の値編集画面と区別してProfileSettingsの項目メタデータを操作するUI/APIを追加する。既存のP000〜とプロフィール値を維持。
+- P0-1の開発版実装を追加済み。**次は P0-2「ユニット所属解除・表示順変更」**を開発版で対応する。
 - 変更前にCore/LogコピーでID採番、列追加、保存失敗時の巻き戻し、非表示→再表示、Quizへの影響をテスト。
 - この監査はGitHub開発ブランチの文書のみ。**本番シート操作、main統合、GASデプロイは行わない**。
