@@ -39,6 +39,8 @@ function catalogUnitMembershipExpectOrder_(actual,expected) {
     throw new Error('表示順が更新されています。ユニット一覧を再読み込みしてください。');
 }
 function catalogUnitMembershipSetCell_(cell,value,undo) {
+  if(typeof cell.getFormula==='function'&&cell.getFormula())
+    throw new Error('表示順のセルに数式があるため変更を止めました。');
   const before=cell.getValue();
   if(String(before)===String(value))return;
   cell.setValue(value);
