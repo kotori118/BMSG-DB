@@ -300,7 +300,7 @@ function issueNumber_(ss, key) {
   return withSharedWriterLock_('ID採番', function(){
     const reservation = reserveNumberForKey_(ss, key, 'BMSG-DB_LEGACY', '旧管理ルートからの採番');
     finalizeIdReservation_(reservation, true, '旧管理ルートで発行済み');
-    return reservation.numericValue;
+    return key === 'NEXT_GROUP_ID_GROUP' || key === 'NEXT_GROUP_ID_UNIT' || key === 'NEXT_MEMBER_ID_GLOBAL' ? reservation.issuedId : reservation.numericValue;
   });
 }
 
