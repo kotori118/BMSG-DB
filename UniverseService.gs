@@ -424,7 +424,7 @@ function createSongWithPartsCore_(ss, song, credits, parsedParts, context) {
   if (duplicate) return {ok:false, duplicate:true, songId:id_(duplicate.values[songsTable.map.SongID]), title:song.title, artist:song.artist};
   assertUniverseServiceArtist_(ss, song.artist);
   const parts = Array.isArray(parsedParts) ? parsedParts : [];
-  if (!parts.length) throw new Error('歌詞パートがありません。');
+  if (!parts.length && !context.allowEmptyParts) throw new Error('歌詞パートがありません。');
 
   const band = BU1.SONG_BANDS[song.artist] || BU1.SONG_BANDS.DEFAULT;
   const reservation = reserveNumberForKey_(ss, 'NEXT_SONG_ID_' + band, context.source || 'BMSG-DB', (context.notePrefix || '新規曲') + ': ' + song.title);
@@ -438,6 +438,9 @@ function createSongWithPartsCore_(ss, song, credits, parsedParts, context) {
     songValues[songsTable.map.Form] = song.form;
     songValues[songsTable.map.CDTitle] = song.cdTitle;
     songValues[songsTable.map.IsTitleTrack] = song.isTitleTrack;
+    if (songsTable.map.RecordStatus != null) songValues[songsTable.map.RecordStatus] = 'ACTIVE';
+    if (songsTable.map.SongType != null) songValues[songsTable.map.SongType] = context.songType || 'NORMAL';
+    if (songsTable.map.SoloMemberID != null) songValues[songsTable.map.SoloMemberID] = context.soloMemberId || '';
     rollback.push({sheet:songsSheet,row:appendStyledRow_(songsSheet, songValues)});
 
     let creditsSheet = null;
@@ -483,6 +486,7 @@ function createSongWithPartsCore_(ss, song, credits, parsedParts, context) {
     rollback.sort(function(a,b){ return b.row-a.row; }).forEach(function(item){
       try { if (item.row >= 2 && item.row <= item.sheet.getLastRow()) item.sheet.deleteRow(item.row); } catch (ignore) {}
     });
+    if (song.artist === 'BE:FIRST') try { syncPerformanceMetricRows(ss, true); } catch (ignore) {}
     try { finalizeIdReservation_(reservation, false, '新規曲登録失敗: ' + song.title); } catch (ignore) {}
     throw e;
   }
