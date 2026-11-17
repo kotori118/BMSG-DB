@@ -474,10 +474,6 @@ function createSongWithPartsCore_(ss, song, credits, parsedParts, context) {
       rollback.push({sheet:partsSheet,row:appendStyledRow_(partsSheet, values)});
     });
 
-    if (song.artist === 'BE:FIRST') {
-      const metric=ensurePerformanceMetricRowForSong_(ss,reservation.issuedId);
-      if(metric.created)rollback.push({sheet:metric.sheet,row:metric.row});
-    }
     SpreadsheetApp.flush();
     const verifySongs = readTable_(songsSheet).rows.filter(function(r){ return id_(r.values[songsTable.map.SongID]) === reservation.issuedId; });
     const verifyPartsTable = readTable_(partsSheet);
@@ -613,7 +609,6 @@ function commitLegacyDirectMasters_() {
       assignSongIdToExistingRowCore_(ss, item.rowNumber, {source:'BMSG-DB_LEGACY',notePrefix:'Spreadsheet 楽曲登録'});
       songs++;
     });
-    if (songs) syncPerformanceMetricRows(ss, true);
     return {ok:true, guests:guests, songs:songs};
   });
 }
