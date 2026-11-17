@@ -77,9 +77,9 @@ function changeCatalogMemberPrimaryGroupForUniverse(payload) {
     const m=catalogRow_(members,'MemberID',mid);catalogEnsureActive_(members,m);
     const oldGroup=id_(m.values[members.map.GroupID]);
     if(oldGroup===gid)return {ok:true,memberId:mid,unchanged:true};
-    const groups=catalogTable_(ss,BU1.SHEETS.GROUPS,['GroupID','GroupKind','RecordStatus']);
+    const groups=catalogTable_(ss,BU1.SHEETS.GROUPS,['GroupID','RecordStatus']);
     const g=catalogRow_(groups,'GroupID',gid);catalogEnsureActive_(groups,g);
-    if(clean_(g.values[groups.map.GroupKind])!=='GROUP')
+    if(!gid.startsWith('G'))
       throw new Error('主所属はグループのみ指定できます。ユニットは別管理です。');
     const links=catalogTable_(ss,BU1.SHEETS.GROUP_MEMBERS,['GroupID','MemberID','DisplayOrder']);
     const own=links.rows.filter(function(r){return id_(r.values[links.map.MemberID])===mid;});
