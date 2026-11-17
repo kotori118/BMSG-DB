@@ -81,3 +81,14 @@ test('new BE:FIRST song creates only its missing performance-metrics row',()=>{
   assert.match(create,/rollback\.push\(\{sheet:metric\.sheet,row:metric\.row\}\)/);
   assert.doesNotMatch(create,/syncPerformanceMetricRows\(ss, true\)/);
 });
+
+test('DB optimization audit is administrator gated and performs read-only checks',()=>{
+  const audit=fs.readFileSync(path.join(root,'CatalogDbAudit.gs'),'utf8');
+  assert.match(audit,/function auditCatalogDatabaseForUniverse\(payload\)/);
+  assert.match(audit,/catalogRequireAdmin_\(payload\|\|\{\}\)/);
+  assert.match(audit,/ORPHAN_LYRICS/);
+  assert.match(audit,/MISSING_METRICS/);
+  assert.match(audit,/CREDIT_TITLE_DRIFT/);
+  assert.match(audit,/LEGACY_INPUT/);
+  assert.doesNotMatch(audit,/\.setValues\(|\.setValue\(|\.clearContent\(|\.deleteRow\(/);
+});
