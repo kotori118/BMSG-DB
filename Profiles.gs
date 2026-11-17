@@ -276,8 +276,7 @@ function applyProfileSyncPlan_(ss, plan) {
 
   const allItems = [];
   plan.newMembers.forEach(item => {
-    const band = BU1.MAIN_GROUP_BANDS[item.mainGroupName] || 500;
-    const memberId = String(issueNumber_(ss, 'NEXT_MEMBER_ID_' + band));
+    const memberId = String(issueNumber_(ss, 'NEXT_MEMBER_ID_GLOBAL'));
     item.memberId = memberId;
     input.getRange(item.inputRow, 3).setValue(memberId);
     appendStyledRow_(membersSheet, [memberId, item.groupId, item.name, item.colorHex, item.displayOrder]);
