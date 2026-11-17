@@ -98,7 +98,7 @@ test('card collection and recent activity references prevent image deletion',()=
 });
 test('unreferenced image removal clears only its record and does not delete Drive files',()=>{
   const x=fixture();x.call('maintainCatalogImageForUniverse',{imageId:'101',action:'DELETE',confirm:'101',expectedRevision:x.revision('Images','ImageID','101')});
-  assert.equal(x.tables.Images[2][0],'');assert.equal(x.tables.Images[1][4],'member-file');assert.equal(x.files.length,0);
+  assert.equal(x.tables.Images[2][0],'');assert.equal(x.tables.Images[1][3],'member-file');assert.equal(x.files.length,0);
 });
 test('retired logo cleanup is a no-op when only member images exist',()=>{
   const x=fixture(),members=structuredClone(x.tables.Images.slice(1,3));x.call('retireCatalogLogosForUniverse',{confirm:'RETIRE_LOGOS'});
