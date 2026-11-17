@@ -78,6 +78,7 @@ function makeFixture({failAt='' }={}){
   });
   vm.createContext(ctx);
   vm.runInContext(source,ctx);
+  const realParse=ctx.parseSongLyricsForUniverse;
   // Only the text-to-parts parser is stubbed; we execute REAL site-facing
   // writer entry points including transaction and row verification.
   ctx.parseSongLyricsForUniverse=({rawLyrics})=>{
@@ -90,7 +91,7 @@ function makeFixture({failAt='' }={}){
     form:'シングル',cdTitle:'QA-Only Single',isTitleTrack:true
   },credits:{lyricists:'QA Artist',composers:'QA Producer',choreographers:'QA Dance'},
     rawLyrics:'SOTA\nOriginal line'};
-  return{store,sheets,ctx,reservations,finalized,call,newPayload};
+  return{store,sheets,ctx,realParse,reservations,finalized,call,newPayload};
 }
 test('song writer can create song, credits, lyrics and metrics without old input sheet',()=>{
   const x=makeFixture(),o=x.call('saveNewSongLyricsForUniverse',x.newPayload);
@@ -163,6 +164,7 @@ test('real lyrics parser resolves named singers and preserves parenthesized lyri
   const lyricsSource=fs.readFileSync(path.join(import.meta.dirname,'..','Lyrics.gs'),'utf8');
   const x=makeFixture();
   vm.runInContext(lyricsSource,x.ctx);
+  x.ctx.parseSongLyricsForUniverse=x.realParse;
   const masters={
     byName:{
       SOTA:[{id:'101',name:'SOTA'}],
