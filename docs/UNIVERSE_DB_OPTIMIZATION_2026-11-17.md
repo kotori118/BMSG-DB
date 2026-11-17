@@ -1,7 +1,7 @@
 # BMSG Universe — DB最適化・サイト経由管理移行計画（開発版）
 
 状態：**設計＋開発ブランチ実装のみ**。本番DBの移行／シート保護／デプロイは未実施。
-対象：Core DB（監査時25タブ、13削除後24タブ）＋Log DB（22タブ）。サイト用共通Writerを唯一の更新入口にする。
+対象：Core DB（監査時25タブ、13削除後24タブ、12削除後**23タブ**）＋Log DB（22タブ）。サイト用共通Writerを唯一の更新入口にする。
 正本：Google Driveの現行仕様書、PHASE 3デザイン仕様書、GAS一括実装仕様書。既存機能の動作優先。
 
 ## 絶対に守る不変条件
@@ -15,7 +15,7 @@
 7. 主体のコラボ相手（ATEEZ/SB19等）の独立アーティスト管理は行わない。ソロ曲だけSongType=SOLOとSoloMemberIDで識別する。
 8. データの手動一括修正や過去履歴破棄は不可。スキーマ追加はバックアップ＋明示承認後の段階的マイグレーションのみ。
 
-## Core DBの扱い（監査時25タブ／現在24タブ）
+## Core DBの扱い（監査時25タブ／現在23タブ）
 
 | タブ | 役割 | 方針 |
 | --- | --- | --- |
@@ -42,7 +42,7 @@
 | 削除予定_移行_要確認 | 過去の移行台帳 | 未解決案件が0件か確認してから整理 |
 | 削除予定_確認_カード同期 | 旧画像同期UI | 現行カード実装の参照を確認してから整理 |
 | 削除予定_06_MemberTags | 旧タグ表 | 現行プロフィール項目と差分を照合してから整理 |
-| 12_Videos | 映像出演分析・動画状態 | 既存機能・保存仕様維持 |
+| 12_Videos | 旧映像出演分析の動画状態 | **2026-11-17削除済み**。83件を含むCore DBバックアップ取得後、ユーザー指示で削除。動画分析は別プロジェクトで検討 |
 | 13_VideoSegments | 出演区間（旧予約領域） | **2026-11-17、ユーザー指示で削除済み。** データ0行。Core DB全体の別ファイルバックアップ取得・確認後に削除。再導入は別途設計が必要 |
 
 Log DB 22タブはUsers/IDRegistry/ProfileSettings/各サービスの操作ログを保持。
@@ -112,7 +112,7 @@ Log DB 22タブはUsers/IDRegistry/ProfileSettings/各サービスの操作ロ�
 
 ## まだやらないこと
 
-- Core DBへの直接の列追加、既存値の書き換え、入力・旧タブの削除（ユーザーが明示指示した13_VideoSegmentsの削除のみ例外として実施済み）
+- Core DBへの直接の列追加、既存値の書き換え、入力・旧タブの削除（ユーザーが明示指示した13_VideoSegmentsと12_Videosの削除のみ例外として実施済み）
 - 既存シートの行順並べ替え、歌詞・パフォーマンスの値の一括再構築
 - mainへのmerge、GASバージョン更新、公開サイトのデプロイ
 - サイト機能が不足している状態でのDB保護・編集権限の一括変更
@@ -124,5 +124,15 @@ Log DB 22タブはUsers/IDRegistry/ProfileSettings/各サービスの操作ロ�
 - 実行日：2026-11-17。ユーザーの明示指示に基づき、Core DBの `13_VideoSegments`（sheetId=315003、ヘッダー以外のデータ0件）を削除。
 - 原本の全25タブを同じGoogle Drive内に `BMSG_Universe_DB_BACKUP_before_13_VideoSegments_delete_20261117` としてコピーし、25タブおよび元13のヘッダーを確認後に削除。
 - バックアップID：`1P9WmojQTZjHSgaiAZ7x0_QxKWmFWxAa12ixNiBoaOtw`。
-- 削除後はCore DBが24タブ、`12_Videos`・`10_PerformanceMetrics`・`06_Songs` の存在を確認。
+- 当該削除直後はCore DBが24タブ、`12_Videos`・`10_PerformanceMetrics`・`06_Songs` の存在を確認。**その後12_Videosを別途バックアップ後に削除し、現在Core23タブ。**
 - コードの本番反映・サイトのデプロイは未実施。開発中の映像出演分析は今後独立した設計確認が必要。
+
+## 2026-11-17 追加変更：12_Videos削除・動画分析の分離
+
+- ユーザー方針を「Universeの映像分析と動画管理はいったん停止。映像出演分析は別プロジェクトで行う」に変更。
+- 削除前の`12_Videos`には83件（全件Status=not_started）。使用中の公開サイト主要コードには本タブの直接参照を確認できず、旧監査もBMSG-PJ/BMSG-DBの直接参照を検出していなかった。
+- **Core DB全24タブを別Google Sheetsへ非共有コピー**。バックアップ：`1Zupx1sdRGe6kW4oTKPfzJ9Wf47P_2ZFXo-xq_Q59UOA`。24タブと動画83件、10_PerformanceMetricsの存在を確認後、本番Coreから`12_Videos`(sheetId=315001)を削除。
+- 削除後、Core23タブ、`12_Videos`なし、`10_PerformanceMetrics`あり、旧入力3タブ維持を再確認。Log DB 22タブ無変更。新しい動画シートは作らない。
+- **歌唱・センター秒数計測は動画分析と別**。`10_PerformanceMetrics`と独立した`metrics`ルート、SETTINGSの「ツール」入口を維持する。新MANAGEMENTページに計測・動画メニューは置かない。
+- UI情報設計の最新版はBMSG-PJの`docs/UNIVERSE_MANAGEMENT_PAGE_NAVIGATION_DESIGN_2026-11-17.md`。
+- 12のデータを後から参照したくなった場合はバックアップから必要なデータだけ復元する。通常運用のUniverseに映像分析を無断で再導入しない。
