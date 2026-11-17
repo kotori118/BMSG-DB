@@ -1,4 +1,3 @@
-/** TEST-ONLY SOURCE. Do not merge/deploy; library binding must use separate staging script. */
 /**
  * BMSG Universe 管理GAS
  * 共通設定・メニュー・安全な読書きヘルパー
@@ -6,8 +5,8 @@
 
 const BU1 = Object.freeze({
   VERSION: '1.1.0',
-  CORE_DB_ID: '1VANjD182-JPIYkYJ6J-6FdqQ5d8nZXsX9iyIhIlfyPk',
-  LOG_DB_ID: '1-j0QqCQKvSyMFSFifZ0hdNIuQ8cmfkRTuop1eGlj1Kk',
+  CORE_DB_ID: '1-1AY6-BACOaGW3HIgYS0UjFMPSh-cjvYMMnJ_UYoRFY',
+  LOG_DB_ID: '10vDKc_Q431iMDTTqB2A16i-Yp28oXSInoKiJXZtonRQ',
   CARD_IMAGE_FOLDER_ID: '1ayh-EAbV585JqRofClrTHjBxNTQlfQBK',
   ID_REGISTRY_SHEET: 'IDRegistry',
   SHEETS: Object.freeze({
