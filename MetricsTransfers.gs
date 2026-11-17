@@ -24,6 +24,7 @@ function ensurePerformanceMetricRowForSong_(ss, songId) {
 }
 
 function syncPerformanceMetricRows(optionalSs, silent) {
+  blockLegacySheetWrite_('秒数表の旧全表同期');
   const ss = optionalSs && optionalSs.getSheets ? optionalSs : SpreadsheetApp.getActiveSpreadsheet();
   const sheet = requireSheet_(ss, BU1.SHEETS.METRICS), songs = readTable_(requireSheet_(ss, BU1.SHEETS.SONGS));
   const target = songs.rows.filter(r => clean_(r.values[songs.map.Artist]) === 'BE:FIRST');
@@ -63,6 +64,7 @@ function confirmAndSyncPartTransfers() {
 }
 
 function deleteSelectedPartTransfer() {
+  blockLegacySheetWrite_('旧パート移行削除');
   const ss = SpreadsheetApp.getActiveSpreadsheet(), sheet = ss.getActiveSheet();
   if (sheet.getName() !== BU1.SHEETS.TRANSFERS || sheet.getActiveRange().getRow() < 2) { alert_('削除', '11_PartTransfersの対象行を選択してください。'); return; }
   if (confirm_('パート移行を削除', sheet.getActiveRange().getRow() + '行目を削除しますか？')) sheet.deleteRow(sheet.getActiveRange().getRow());
