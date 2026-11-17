@@ -74,3 +74,11 @@ Compare every existing legacy spreadsheet write operation against site actions: 
 Core／Log全46シートの51矩形をuserEnteredValue.formulaValue・errorValue・validation限定で検査（13batch）。数式1件、エラー0、削除候補へのformula／validation参照0。両repoの本番コードで削除予定7／11／Topicsを読む直接参照なし（監査分類文字列は除外）。旧入力だけlegacyメニュー・validator／自動レイアウトに依存が残るため、先に旧入力モードを永久停止し旧設定UI／Writerを撤去する。
 
 削除前に指定バックアップフォルダへCore／Log全体の新規コピーを作成し、ファイルIDが本番と異なること・全タブ保持を確認する。既存バックアップを変更しない。コード反映・backup確認・直前再読込の後にdeleteSheetだけを実行し、保持対象sheetId・正本と履歴・エラーを再確認する。実施成否と新backup IDsはDrive正本／PRの最終記録で確認する。
+
+
+## 追加整理：プロフィールクイズ残骸・旧ID対応（2026-11-17）
+ユーザーの不要データ削除指示に基づく追加監査。ProfileSettings本体は現行プロフィール項目の唯一の定義として必要。IsCompareTargetは現行検索で使用するため維持。廃止済みプロフィールクイズ用のQuizDifficultyだけを必須ヘッダー・初期値・返却データから撤去し、8列構成を検証する。移行_旧ID対応は現在の両リポジトリの実行コードからの参照がなく、独立した全体バックアップへ履歴を残して稼働Coreから削除する。DBライブラリ更新→PJ固定参照更新→公開反映確認→列・シート物理削除の順序。実施結果と復元元はDrive既存正本の変更履歴に追記する。
+
+
+## 確定変更：プロフィール定義をCoreへ統合（2026-11-17）
+ユーザー指示により、ProfileSettingsをLogからCoreへ移管する。項目ID・名称・型・分類・表示順・表示状態・検索対象フラグと05_Profilesの値を保持。廃止済みQuizDifficultyを削除し8列構成にする。プロフィール表示・編集・検索、項目登録・非表示・再表示・採番、保守のバックアップ・復元をすべてCore定義へ切替。監査・IDRegistry等の履歴はLogに維持。独立した旧バックアップからの復元のみ旧Log位置を読み取り、QuizDifficultyを除外してCoreへ復元する互換処理を残す（本番Logへのフォールバックは行わない）。移行前にCore/Logを全体コピーし、転記・コード公開後の一致を確認して旧Log側と移行_旧ID対応を削除する。実施結果・復元元はDrive既存正本へ追記する。
