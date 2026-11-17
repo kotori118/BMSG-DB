@@ -220,6 +220,46 @@ function catalogRequireReady_(ss){
   if(!s.ready)throw new Error('サイト管理用DBの移行がまだ完了していません: '+s.missing.join(', '));
 }
 
+/**
+ * Globally unique colors for NEW/CHANGED Group, Unit and Member colors.
+ * Historical unchanged collisions are accepted without silently rewriting
+ * existing records (e.g., group/individual legacy values).
+ * All comparisons normalize #RRGGBB case; blanks are not valid for new writes.
+ */
+function catalogRequireUniqueColor_(ss,proposed,exceptKind,exceptId) {
+  const color=normalizeHex_(proposed);
+  if(!color)throw new Error('カラーコードを選択してください。');
+  const tables=[
+    {sheet:BU1.SHEETS.GROUPS,id:'GroupID',name:'GroupName',kind:'GROUP',label:'グループ・ユニット'},
+    {sheet:BU1.SHEETS.MEMBERS,id:'MemberID',name:'DisplayName',kind:'MEMBER',label:'メンバー'}
+  ];
+  const conflicts=[];
+  tables.forEach(function(def){
+    const t=catalogTable_(ss,def.sheet,[def.id,def.name,'ColorHex']);
+    t.rows.forEach(function(r){
+      const otherId=id_(r.values[t.map[def.id]]);
+      if(!otherId||(def.kind===exceptKind&&otherId===id_(exceptId)))return;
+      const original=clean_(r.values[t.map.ColorHex]);
+      if(!/^#[0-9a-fA-F]{6}$/.test(original))return;
+      if(original.toUpperCase()===color){
+        const name=clean_(r.values[t.map[def.name]])||otherId;
+        conflicts.push(def.label+'「'+name+'」');
+      }
+    });
+  });
+  if(conflicts.length)throw new Error(
+    'カラーコード '+color+' はすでに'+conflicts.join('、')+'が使用しています。別の色を選択してください。'
+  );
+  return color;
+}
+function catalogValidateChangedColor_(ss,proposed,previous,kind,id) {
+  const proposedColor=normalizeHex_(proposed);
+  if(!proposedColor)throw new Error('カラーコードを選択してください。');
+  // Do not reject an existing record solely due to historical overlap.
+  if(proposedColor===clean_(previous).toUpperCase())return proposedColor;
+  return catalogRequireUniqueColor_(ss,proposedColor,kind,id);
+}
+
 function createCatalogGroupForUniverse(payload){
   const actor=catalogRequireAdmin_(payload);
   const name=catalogRequiredString_(payload.name,'グループ名',100);
@@ -230,6 +270,7 @@ function createCatalogGroupForUniverse(payload){
     const ss=openCoreSpreadsheet_();catalogRequireReady_(ss);
     const t=catalogTable_(ss,BU1.SHEETS.GROUPS,['GroupID','GroupName','ColorHex','DisplayOrder','GroupKind','RecordStatus']);
     if(t.rows.some(r=>clean_(r.values[t.map.GroupName]).toLowerCase()===name.toLowerCase()))throw new Error('同名グループが既に存在します。');
+    catalogRequireUniqueColor_(ss,color,'GROUP','');
     const reservation=reserveNumberForKey_(ss,'NEXT_GROUP_ID','BMSG-DB_SITE_CATALOG','サイトでGroup作成: '+name);
     let row=0;
     try{
@@ -262,7 +303,7 @@ function updateCatalogGroupForUniverse(payload){
     if(newName!==before.GroupName&&songs.rows.some(r=>clean_(r.values[songs.map.Artist])===before.GroupName))
       throw new Error('曲のArtistに使用中のためグループ名は変更できません。');
     if(t.rows.some(r=>r!==row&&id_(r.values[t.map.GroupID])!==gid&&clean_(r.values[t.map.GroupName]).toLowerCase()===newName.toLowerCase()))throw new Error('同じ名前のグループが存在します。');
-    const changes={GroupName:newName,ColorHex:normalizeHex_(payload.color||before.ColorHex)};
+    const changes={GroupName:newName,ColorHex:catalogValidateChangedColor_(ss,payload.color||before.ColorHex,before.ColorHex,'GROUP',gid)};
     return catalogWriteRecord_(t,row,changes,'GROUP','UPDATE',actor);
   });
 }
@@ -277,6 +318,7 @@ function createCatalogMemberForUniverse(payload){
     if(clean_(grp.values[g.map.GroupKind])!=='GROUP')throw new Error('主所属にはGROUPを指定してください。ユニットへの参加は所属管理から追加します。');
     const m=catalogTable_(ss,BU1.SHEETS.MEMBERS,['MemberID','GroupID','DisplayName','ColorHex','DisplayOrder','RecordStatus']);
     if(m.rows.some(r=>clean_(r.values[m.map.DisplayName]).toLowerCase()===name.toLowerCase()))throw new Error('同名メンバーが登録済みです。');
+    catalogRequireUniqueColor_(ss,color,'MEMBER','');
     const gm=catalogTable_(ss,BU1.SHEETS.GROUP_MEMBERS,['GroupID','MemberID','DisplayOrder']);
     const p=catalogTable_(ss,BU1.SHEETS.PROFILES,['MemberID']);
     const groupName=clean_(grp.values[g.map.GroupName]);
@@ -315,7 +357,7 @@ function updateCatalogMemberForUniverse(payload){
     const row=catalogRow_(t,'MemberID',memberId);catalogEnsureActive_(t,row);
     const name=catalogRequiredString_(payload.name||row.values[t.map.DisplayName],'メンバー名',120);
     if(t.rows.some(r=>r.rowNumber!==row.rowNumber&&clean_(r.values[t.map.DisplayName]).toLowerCase()===name.toLowerCase()))throw new Error('同名メンバーが存在します。');
-    return catalogWriteRecord_(t,row,{DisplayName:name,ColorHex:normalizeHex_(payload.color||row.values[t.map.ColorHex])},'MEMBER','UPDATE',actor);
+    return catalogWriteRecord_(t,row,{DisplayName:name,ColorHex:catalogValidateChangedColor_(ss,payload.color||row.values[t.map.ColorHex],row.values[t.map.ColorHex],'MEMBER',memberId)},'MEMBER','UPDATE',actor);
   });
 }
 
