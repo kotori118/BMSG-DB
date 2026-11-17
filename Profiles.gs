@@ -18,6 +18,7 @@ const BU_PROFILE = Object.freeze({
 });
 
 function confirmAndSyncProfiles() {
+  blockLegacySheetWrite_('旧プロフィール同期');
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   withDocumentLock_('プロフィール同期', function() {
     const plan = buildProfileSyncPlan_(ss);
@@ -375,6 +376,7 @@ function keepThreeEmptyProfileColumns_(sheet) {
 }
 
 function retireSelectedProfileField() {
+  blockLegacySheetWrite_('旧プロフィール項目の非表示');
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const sheet = ss.getActiveSheet();
   if (sheet.getName() !== BU1.SHEETS.INPUT_PROFILE) { alert_('項目廃止', '入力_プロフィールで対象列を選択してください。'); return; }
@@ -396,6 +398,7 @@ function retireSelectedProfileField() {
 }
 
 function restoreRetiredProfileFields() {
+  blockLegacySheetWrite_('旧プロフィール項目の復元');
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   const retired = clean_(getConfig_(ss, 'RETIRED_PROFILE_IDS', '')).split(',').map(clean_).filter(Boolean);
   if (!retired.length) { alert_('廃止項目', '廃止中のプロフィール項目はありません。'); return; }
