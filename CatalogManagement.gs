@@ -10,7 +10,7 @@
 const BU_CATALOG_SCHEMA_ = Object.freeze({
   groups:['GroupKind','RecordStatus'],
   members:['RecordStatus'],
-  songs:['RecordStatus','SongType','SoloMemberID']
+  songs:['SongType','SoloMemberID']
 });
 const BU_CATALOG_MAIN_GROUP_NAMES_ = Object.freeze(['BE:FIRST','MAZZEL','STARGLOW','HANA']);
 const BU_CATALOG_SOLOS_ = Object.freeze({
@@ -71,7 +71,6 @@ function catalogAudit_(kind,id,action,before,after,actor) {
   Object.keys(obj).forEach(k=>vals[t.map[k]]=obj[k]);
   appendStyledRow_(sheet,vals);
 }
-function catalogStatus_(table,row){return clean_(row.values[table.map.RecordStatus])||'ACTIVE';}
 function catalogWriteRecord_(table,row,updates,kind,action,actor) {
   const before=row.values.slice();
   const after=before.slice();
@@ -175,12 +174,11 @@ function migrateCatalogManagementSchemaForUniverse(payload){
       if(id_(r.values[m.map.MemberID])&&!clean_(r.values[m.map.RecordStatus]))
         m.sheet.getRange(r.rowNumber,m.map.RecordStatus+1).setValue('ACTIVE');
     });
-    const s=catalogTable_(ss,BU1.SHEETS.SONGS,['SongID','Title','Artist','RecordStatus','SongType','SoloMemberID']);
+    const s=catalogTable_(ss,BU1.SHEETS.SONGS,['SongID','Title','Artist','SongType','SoloMemberID']);
     const ids={};
     m.rows.forEach(r=>{if(id_(r.values[m.map.MemberID]))ids[clean_(r.values[m.map.DisplayName])]=id_(r.values[m.map.MemberID]);});
     s.rows.forEach(r=>{
       const sid=id_(r.values[s.map.SongID]);if(!sid)return;
-      if(!clean_(r.values[s.map.RecordStatus]))s.sheet.getRange(r.rowNumber,s.map.RecordStatus+1).setValue('ACTIVE');
       const solo=BU_CATALOG_SOLOS_[sid];
       const valid=solo&&clean_(r.values[s.map.Title])===solo.title&&clean_(r.values[s.map.Artist])==='BE:FIRST';
       if(!clean_(r.values[s.map.SongType]))s.sheet.getRange(r.rowNumber,s.map.SongType+1).setValue(valid?'SOLO':'NORMAL');
@@ -337,8 +335,8 @@ function saveCatalogSoloForUniverse(payload){
   if(['NORMAL','SOLO'].indexOf(songType)<0)throw new Error('NORMAL/SOLOのみ対応します。');
   return withSharedWriterLock_('楽曲分類更新',function(){
     const ss=openCoreSpreadsheet_();catalogRequireReady_(ss);
-    const t=catalogTable_(ss,BU1.SHEETS.SONGS,['SongID','Artist','SongType','SoloMemberID','RecordStatus']);
-    const row=catalogRow_(t,'SongID',songId);catalogEnsureActive_(t,row);
+    const t=catalogTable_(ss,BU1.SHEETS.SONGS,['SongID','Artist','SongType','SoloMemberID']);
+    const row=catalogRow_(t,'SongID',songId);
     let mid='';
     if(songType==='SOLO'){
       if(clean_(row.values[t.map.Artist])!=='BE:FIRST')throw new Error('ソロ担当はBE:FIRST曲にのみ設定可能です。');
@@ -353,19 +351,112 @@ function saveCatalogSoloForUniverse(payload){
   });
 }
 
-function setCatalogSongArchiveForUniverse(payload){
+/**
+ * Permanent deletion (not archive). Preview always rechecks live dependencies.
+ * Child rows (credits, lyrics, metrics, part transfers) are cleared with Song.
+ * External workbooks are NOT under the Core DB transaction; users must first
+ * inspect references such as YouTube analytics and setlists. Unknown Core / Log
+ * references block deletion. IDRegistry is intentionally retained.
+ */
+function catalogSongDeletePlan_(ss,songId) {
+  const songs=catalogTable_(ss,BU1.SHEETS.SONGS,['SongID','Title']);
+  const song=catalogRow_(songs,'SongID',songId);
+  const rows=[{sheet:songs.sheet,rowNumber:song.rowNumber,label:'06_Songs'}];
+  const counts={},blockers=[];
+  const children=[
+    [BU1.SHEETS.SONG_CREDITS,'07_SongCredits'],
+    [BU1.SHEETS.LYRICS_PARTS,'08_LyricsParts'],
+    [BU1.SHEETS.METRICS,'10_PerformanceMetrics'],
+    [BU1.SHEETS.TRANSFERS,'11_PartTransfers']
+  ];
+  children.forEach(function(item){
+    const table=catalogTable_(ss,item[0],['SongID']);
+    const found=table.rows.filter(function(r){return id_(r.values[table.map.SongID])===songId;});
+    counts[item[1]]=found.length;
+    found.forEach(function(r){rows.push({sheet:table.sheet,rowNumber:r.rowNumber,label:item[1]});});
+  });
+  const skip={};
+  [BU1.SHEETS.SONGS].concat(children.map(function(x){return x[0];})).forEach(function(k){skip[k]=true;});
+  const log=SpreadsheetApp.openById(BU1.LOG_DB_ID);
+  const pattern=new RegExp('(^|[^0-9])'+songId+'([^0-9]|$)');
+  function inspect(sheet) {
+    if(sheet.getLastRow()<2||sheet.getLastColumn()<1)return;
+    const table=readTable_(sheet);
+    const direct=['SongID','SourceSongID','TargetSongID','OriginalSongID']
+      .filter(function(k){return table.map[k]!=null;});
+    const json=['CandidateSongIDsJSON','SourceRefJSON','SongIDsJSON'].filter(function(k){return table.map[k]!=null;});
+    const hasTarget=table.map.TargetID!=null&&table.map.TargetType!=null;
+    const hasRecent=table.map.TargetID!=null&&table.map.ActivityType!=null;
+    if(!direct.length&&!json.length&&!hasTarget&&!hasRecent)return;
+    let count=0;
+    table.rows.forEach(function(r){
+      const v=r.values;
+      const linked=direct.some(function(k){return id_(v[table.map[k]])===songId;}) ||
+        json.some(function(k){return pattern.test(clean_(v[table.map[k]]));}) ||
+        (hasTarget&&id_(v[table.map.TargetID])===songId&&
+          ['SONG','LYRICS'].indexOf(clean_(v[table.map.TargetType]).toUpperCase())>=0) ||
+        (hasRecent&&id_(v[table.map.TargetID])===songId&&
+          /LYRICS|SONG/.test(clean_(v[table.map.ActivityType]).toUpperCase()));
+      if(linked)count++;
+    });
+    if(count)blockers.push(sheet.getName()+' に参照 '+count+'件');
+  }
+  ss.getSheets().filter(function(sh){return !skip[sh.getName()];}).forEach(inspect);
+  log.getSheets().filter(function(sh){return ['IDRegistry','CATALOG_Audit'].indexOf(sh.getName())<0;}).forEach(inspect);
+  if(rows.length>500)blockers.push('内部関連データが500行を超えています。個別の移行が必要です。');
+  return {songId:songId,title:clean_(song.values[songs.map.Title]),counts:counts,
+    blockers:blockers,canDelete:blockers.length===0,rows:rows};
+}
+function getCatalogSongDeletePreviewForUniverse(payload) {
+  catalogRequireAdmin_(payload);
+  const ss=openCoreSpreadsheet_();catalogRequireReady_(ss);
+  const plan=catalogSongDeletePlan_(ss,id_(payload.songId));
+  return {ok:true,songId:plan.songId,title:plan.title,
+    counts:plan.counts,blockers:plan.blockers,canDelete:plan.canDelete};
+}
+function deleteCatalogSongForUniverse(payload) {
   const actor=catalogRequireAdmin_(payload),songId=id_(payload.songId);
-  const target=clean_(payload.status).toUpperCase();
-  if(['ACTIVE','ARCHIVED'].indexOf(target)<0)throw new Error('ACTIVE/ARCHIVEDを指定してください。');
-  if(payload.confirm!==songId)throw new Error('対象SongIDの確認が必要です。');
-  return withSharedWriterLock_('曲のアーカイブ/復元',function(){
+  if(!songId||id_(payload.confirm)!==songId||payload.externalReferencesChecked!==true)
+    throw new Error('削除する曲のSongIDと、外部参照の確認が必要です。');
+  const props=PropertiesService.getScriptProperties();
+  if(props.getProperty('UNIVERSE_CATALOG_SONG_DELETE_ENABLED')!=='true')
+    throw new Error('完全削除は現在無効です。管理者による有効化とバックアップ確認が必要です。');
+  const backup=clean_(props.getProperty('UNIVERSE_CATALOG_BACKUP_ID'));
+  if(!backup||backup===BU1.CORE_DB_ID)throw new Error('別ファイルのCore DBバックアップを設定してください。');
+  if(!DriveApp.getFileById(backup).getName())throw new Error('バックアップを確認できません。');
+  return withSharedWriterLock_('楽曲完全削除',function(){
     const ss=openCoreSpreadsheet_();catalogRequireReady_(ss);
-    const t=catalogTable_(ss,BU1.SHEETS.SONGS,['SongID','Title','RecordStatus']);
-    const row=catalogRow_(t,'SongID',songId);
-    if(catalogStatus_(t,row)===target)return {ok:true,unchanged:true};
-    const action=target==='ARCHIVED'?'ARCHIVE':'RESTORE';
-    const result=catalogWriteRecord_(t,row,{RecordStatus:target},'SONG',action,actor);
-    return Object.assign(result,{songId,status:target});
+    const plan=catalogSongDeletePlan_(ss,songId);
+    if(clean_(payload.confirmTitle)!==plan.title)throw new Error('曲名が一致しません。削除を中止しました。');
+    if(!plan.canDelete)throw new Error('他の機能から参照されています。削除を中止しました: '+plan.blockers.join(' / '));
+    // Capture all cell values/formulas at original row coordinates.
+    // Clear instead of deleteRow: protects unrelated formulas and row positions.
+    const snapshots=plan.rows.map(function(item){
+      const range=item.sheet.getRange(item.rowNumber,1,1,item.sheet.getLastColumn());
+      return {range:range,label:item.label,row:item.rowNumber,
+        values:range.getValues()[0],formulas:range.getFormulas()[0]};
+    });
+    catalogAudit_('SONG',songId,'DELETE_BEGIN',{title:plan.title,related:plan.counts},null,actor);
+    try {
+      snapshots.forEach(function(snap){snap.range.clearContent();});
+      SpreadsheetApp.flush();
+      snapshots.forEach(function(snap){
+        if(snap.range.getValues()[0].some(function(v){return v!==''&&v!==null;}))
+          throw new Error(snap.label+' '+snap.row+'行の削除後照合に失敗しました。');
+      });
+      catalogAudit_('SONG',songId,'DELETE_COMPLETE',{title:plan.title,related:plan.counts},null,actor);
+      // Do not delete or roll back IDRegistry: SongID must never be reused.
+      return {ok:true,deleted:true,songId:songId,removed:plan.counts};
+    }catch(error){
+      const failures=[];
+      snapshots.forEach(function(snap){
+        try {
+          snap.range.setValues([snap.values.map(function(v,i){return snap.formulas[i]||v;})]);
+        }catch(e){failures.push(snap.label+': '+e.message);}
+      });
+      SpreadsheetApp.flush();
+      throw new Error('削除を中止しました: '+error.message+(failures.length?'／復旧失敗: '+failures.join(' / '):''));
+    }
   });
 }
 
