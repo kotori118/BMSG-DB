@@ -126,13 +126,13 @@ test('existing song info/credits/parts edit via site writer remains coherent',()
   assert.equal(credit.ok,true);
   assert.equal(x.store.Credits[1][2],'Writer B');
   const parts=x.call('saveSongPartsForUniverse',{userId:'U001',songId:'1099',parts:[
-    {singers:[{id:'102',role:'MAIN'}],lyrics:'Second singer'},
-    {singers:[{id:'101',role:'UP'}],lyrics:'Harmony'}
+    {singers:[{id:'M102',role:'MAIN'}],lyrics:'Second singer'},
+    {singers:[{id:'M101',role:'UP'}],lyrics:'Harmony'}
   ]});
   assert.equal(parts.ok,true);
   const own=x.store.Parts.slice(1).filter(r=>r[0]==='1099');
   assert.deepEqual(Array.from(own.map(r=>r[1])),[1,2]);
-  assert.deepEqual(Array.from(own.map(r=>r[2])),['102','101_up']);
+  assert.deepEqual(Array.from(own.map(r=>r[2])),['M102','M101_up']);
   assert.equal(x.store.Metrics.at(-1)[0],'1099');
 });
 test('song write rejects invalid or missing singers and preserves prior parts',()=>{
