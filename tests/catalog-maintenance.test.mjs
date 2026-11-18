@@ -100,10 +100,6 @@ test('unreferenced image removal clears only its record and does not delete Driv
   const x=fixture();x.call('maintainCatalogImageForUniverse',{imageId:'101',action:'DELETE',confirm:'101',expectedRevision:x.revision('Images','ImageID','101')});
   assert.equal(x.tables.Images[2][0],'');assert.equal(x.tables.Images[1][3],'member-file');assert.equal(x.files.length,0);
 });
-test('retired logo cleanup is a no-op when only member images exist',()=>{
-  const x=fixture(),members=structuredClone(x.tables.Images.slice(1,3));x.call('retireCatalogLogosForUniverse',{confirm:'RETIRE_LOGOS'});
-  assert.deepEqual(x.tables.Images.slice(1,3),members);assert.equal(x.tables.Images.length,3);
-});
 test('backups are copied and verified before publishing their IDs',()=>{
   const x=fixture();const r=x.call('createCatalogBackupsForUniverse',{confirm:'CREATE_BACKUP'});
   assert.equal(x.files.length,2);assert.notEqual(r.backup.coreId,'core');assert.equal(x.props.UNIVERSE_CATALOG_BACKUP_ID,r.backup.coreId);assert.ok(x.data[r.backup.coreId].ProfileSettings);assert.ok(x.data[r.backup.logId].IDRegistry);
@@ -121,6 +117,30 @@ test('backup restore preview writes nothing; restore preserves service histories
   const preview=x.call('restoreCatalogMasterDataForUniverse',{preview:true,backupId:'backupCore0'});assert.equal(x.writes.length,0);
   x.call('restoreCatalogMasterDataForUniverse',{preview:false,backupId:'backupCore0',expectedRevision:preview.revision,confirm:'RESTORE_MASTER_DATA'});
   assert.equal(x.tables.Profiles[1][2],'Blue');assert.deepEqual(x.log.CardCollections,logBefore);assert.deepEqual(x.log.IDRegistry.at(-1),['9999']);assert.equal(x.tables.Images.length,3);
+});
+test('restore rejects missing or invalid ArtistIDs in the seven-column schema before writing',()=>{
+  const x=fixture();
+  for(const book of [x.tables,x.data.backupCore0]){
+    book.Groups.push(['U8','Unit','#112233',3,'ACTIVE']);
+    book.Songs=[['SongID','Title','ArtistID','ReleaseDate','Form','CDTitle','IsTitleTrack'],
+      ['1001','Test','G1','','','',''],['5001','Other','U8','','','',''],[],['5002','Solo','M501','','','','']];
+  }
+  const payload={preview:true,backupId:'backupCore0'};
+  assert.equal(x.call('restoreCatalogMasterDataForUniverse',payload).ok,true);
+  for(const invalid of ['G999','U999','M999','501','901','']){
+    x.data.backupCore0.Songs[4][2]=invalid;
+    assert.throws(()=>x.call('restoreCatalogMasterDataForUniverse',payload),/SongID 5002 \/ ArtistID/);
+  }
+  assert.equal(x.writes.length,0);
+});
+test('restore refuses old song and credit headers before writing',()=>{
+  const x=fixture(),payload={preview:true,backupId:'backupCore0'};
+  x.tables.Songs=[['SongID','Title','ArtistID','ReleaseDate','Form','CDTitle','IsTitleTrack']];
+  assert.throws(()=>x.call('restoreCatalogMasterDataForUniverse',payload),/Songsの列構成が異なります/);
+  x.data.backupCore0.Songs=structuredClone(x.tables.Songs);
+  x.tables.Credits=[['SongID','Lyricists','Composers','Choreographers']];
+  assert.throws(()=>x.call('restoreCatalogMasterDataForUniverse',payload),/Creditsの列構成が異なります/);
+  assert.equal(x.writes.length,0);
 });
 test('restore rechecks revision after safety backup and rolls back partial failures',()=>{
   const x=fixture();x.tables.Profiles[1][2]='Changed';let preview=x.call('restoreCatalogMasterDataForUniverse',{preview:true,backupId:'backupCore0'});

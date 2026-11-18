@@ -246,17 +246,11 @@ function createCatalogBackupsForUniverse(payload){
     }catch(e){throw new Error('バックアップを完了できませんでした（作成済みファイルは保持）: '+e.message);}
   });
 }
-/** Retire application logo records; source Drive files are not library-owned assets. */
-function retireCatalogLogosForUniverse(payload){
-  catalogRequireUser_(payload);
-  return {ok:true,retired:0,skipped:true}; // No group/brand image types exist in the five-column schema.
-}
 function prepareCatalogManagementForUniverse(payload){
   catalogRequireUser_(payload);if(payload.confirm!=='PREPARE_MANAGEMENT')throw new Error('初期整備の確認が必要です。');
   const backup=createCatalogBackupsForUniverse({userId:payload.userId,confirm:'CREATE_BACKUP'});
   const schema=migrateCatalogManagementSchemaForUniverse({userId:payload.userId,confirm:'MIGRATE_CATALOG_V1'});
-  const logos=retireCatalogLogosForUniverse({userId:payload.userId,confirm:'RETIRE_LOGOS'});
-  return {ok:true,backup:backup.backup,schema:schema.schema||{ready:true},retiredLogos:logos.retired};
+  return {ok:true,backup:backup.backup,schema:schema.schema||{ready:true}};
 }
 /** Only unambiguous repairs are offered. Orphans and conflicting IDs need entity-level editing. */
 function catalogRepairPlan_(ss){
@@ -311,9 +305,7 @@ function catalogSnapshotDigest_(snapshot){
 function catalogRestorePlan_(entry){
   const current=catalogMasterSnapshot_(BU1.CORE_DB_ID,BU1.LOG_DB_ID),target=catalogMasterSnapshot_(entry.coreId,entry.logId);
   target.forEach(function(t,i){
-    if(JSON.stringify(t.values[0])!==JSON.stringify(current[i].values[0]))throw new Error(t.name+'の列構成が異なります。このバックアップは現在の構造へ直接復元できません。');
-    // Retired logos must not return when restoring an older application snapshot.
-
+    if(JSON.stringify(t.values[0])!==JSON.stringify(current[i].values[0]))throw new Error(t.name+'の列構成が異なります。現行の列構成で作成したバックアップを選んでください。');
   });
   catalogValidateRestoreSnapshot_(target);
   const identityKeys={};identityKeys[BU1.SHEETS.GROUPS]=['GroupID','GROUP'];identityKeys[BU1.SHEETS.MEMBERS]=['MemberID','MEMBER'];identityKeys[BU1.SHEETS.GUESTS]=['GuestID','GUEST'];identityKeys[BU1.SHEETS.SONGS]=['SongID','SONG'];identityKeys[BU1.SHEETS.CARDS]=['ImageID','IMAGE'];
@@ -329,6 +321,14 @@ function catalogValidateRestoreSnapshot_(snapshot){
   ids(BU1.SHEETS.CARDS,'ImageID');ids('ProfileSettings','ProfileID');ids(BU1.SHEETS.PROFILES,'MemberID');
   function refs(name,key,known){const t=byName[name],col=t.values[0].indexOf(key);if(col<0)return;t.values.slice(1).forEach(function(r){const id=id_(r[col]);if(id&&!known.has(id))throw new Error(name+'の参照不整合: '+key+' '+id);});}
   refs(BU1.SHEETS.MEMBERS,'GroupID',groups);refs(BU1.SHEETS.GROUP_MEMBERS,'GroupID',groups);refs(BU1.SHEETS.GROUP_MEMBERS,'MemberID',members);refs(BU1.SHEETS.PROFILES,'MemberID',members);
+  const songTable=byName[BU1.SHEETS.SONGS],songHeader=songTable.values[0];
+  const songCol=songHeader.indexOf('SongID'),artistCol=songHeader.indexOf('ArtistID');
+  if(artistCol>=0) songTable.values.slice(1).forEach(function(row){
+    const songId=id_(row[songCol]),artistId=id_(row[artistCol]);
+    if(!songId)return;
+    const valid=/^M\d+$/.test(artistId)?members.has(artistId):/^[GU]\d+$/.test(artistId)&&groups.has(artistId);
+    if(!valid)throw new Error(BU1.SHEETS.SONGS+'の参照不整合: SongID '+songId+' / ArtistID '+(artistId||'（空欄）'));
+  });
   [BU1.SHEETS.SONG_CREDITS,BU1.SHEETS.LYRICS_PARTS,BU1.SHEETS.METRICS].forEach(function(n){refs(n,'SongID',songs);});
   const images=byName[BU1.SHEETS.CARDS],h=images.values[0];images.values.slice(1).forEach(function(r){if(id_(r[h.indexOf('ImageID')])&&!members.has(id_(r[h.indexOf('MemberID')])))throw new Error('画像のメンバー参照が不正です。');});
   // Histories are retained, so a snapshot may not silently undo their current group labels.
