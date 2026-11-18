@@ -113,6 +113,22 @@ test('song duplicate is rejected without adding rows or issuing a second ID',()=
   assert.equal(JSON.stringify(x.store),original);
   assert.equal(x.reservations.length,1);
 });
+test('credits without Title preserve credit fields across registration, rename, and credit edits',()=>{
+  const x=makeFixture();
+  x.store.Credits[0].splice(1,1);
+  x.store.Songs[0][2]='ArtistID';
+  const song={...x.newPayload.song,artist:'G1'};
+  assert.equal(x.call('saveNewSongLyricsForUniverse',{...x.newPayload,song}).ok,true);
+  assert.deepEqual(Array.from(x.store.Credits[1].slice(0,2)),['1099','QA Artist']);
+  const before=x.store.Credits[1].slice();
+  assert.equal(x.call('saveSongInfoForUniverse',{userId:'U001',songId:'1099',song:{...song,title:'Renamed'}}).ok,true);
+  assert.equal(x.store.Songs[1][1],'Renamed');
+  assert.deepEqual(x.store.Credits[1],before);
+  assert.equal(x.call('saveSongCreditsForUniverse',{userId:'U001',songId:'1099',credits:{
+    lyricists:'Writer B',composers:'Composer B',choreographers:'Choreographer B'
+  }}).ok,true);
+  assert.deepEqual(Array.from(x.store.Credits[1]),['1099','Writer B','Composer B','Choreographer B']);
+});
 test('existing song info/credits/parts edit via site writer remains coherent',()=>{
   const x=makeFixture();x.call('saveNewSongLyricsForUniverse',x.newPayload);
   const info=x.call('saveSongInfoForUniverse',{userId:'U001',songId:'1099',song:{

@@ -13,7 +13,7 @@ function auditCatalogDatabaseForUniverse(payload) {
   const links=catalogTable_(ss,BU1.SHEETS.GROUP_MEMBERS,['GroupID','MemberID']);
   const profiles=catalogTable_(ss,BU1.SHEETS.PROFILES,['MemberID']);
   const songs=catalogTable_(ss,BU1.SHEETS.SONGS,['SongID','Title']);
-  const credits=catalogTable_(ss,BU1.SHEETS.SONG_CREDITS,['SongID','Title']);
+  const credits=catalogTable_(ss,BU1.SHEETS.SONG_CREDITS,['SongID','Lyricists','Composers','Choreographers']);
   const lyrics=catalogTable_(ss,BU1.SHEETS.LYRICS_PARTS,['SongID','PartOrder']);
   const metrics=catalogTable_(ss,BU1.SHEETS.METRICS,['SongID']);
   const warnings=[];
@@ -74,7 +74,7 @@ function auditCatalogDatabaseForUniverse(payload) {
     if(!has(songIds,sid))warn('ORPHAN_CREDIT','07_SongCredits '+sid+' の曲が存在しない');
     if(seenCredit.has(sid))warn('DUPLICATE_CREDIT','07_SongCredits '+sid+' が重複');
     seenCredit.add(sid);
-    if(titles.has(sid)&&titles.get(sid)!==clean_(r.values[credits.map.Title]))
+    if(credits.map.Title!=null&&titles.has(sid)&&titles.get(sid)!==clean_(r.values[credits.map.Title]))
       warn('CREDIT_TITLE_DRIFT','07_SongCredits '+sid+' の曲名は正本と不一致');
   });
   lyrics.rows.forEach(function(r) {
