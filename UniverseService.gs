@@ -122,8 +122,8 @@ function saveSongInfoForUniverse(payload) {
     let beforeCredit = null;
     let afterCredit = null;
     let appendedCredit = false;
-    if (universeServiceBeFirst_(table,target[0])) {
-      requireColumns_(creditsTable, ['SongID','Title','Lyricists','Composers','Choreographers']);
+    if (creditsTable.map.Title != null && universeServiceBeFirst_(table,target[0])) {
+      requireColumns_(creditsTable, ['SongID','Lyricists','Composers','Choreographers']);
       if (creditRows.length) {
         creditRowNumber = creditRows[0].rowNumber;
         beforeCredit = creditsSheet.getRange(creditRowNumber, 1, 1, creditsTable.header.length).getValues()[0];
@@ -174,14 +174,14 @@ function saveSongCreditsForUniverse(payload) {
     if (!universeServiceBeFirst_(songsTable,songRow)) throw new Error('SongCreditsはBE:FIRSTの楽曲のみ登録できます。');
     const sheet = requireSheet_(ss, BU1.SHEETS.SONG_CREDITS);
     const table = readTable_(sheet);
-    requireColumns_(table, ['SongID','Title','Lyricists','Composers','Choreographers']);
+    requireColumns_(table, ['SongID','Lyricists','Composers','Choreographers']);
     const rows = table.rows.filter(r => id_(r.values[table.map.SongID]) === songId);
     if (rows.length > 1) throw new Error('07_SongCreditsでSongIDが重複しています。');
     const row = rows[0] || null;
     const before = row ? sheet.getRange(row.rowNumber, 1, 1, table.header.length).getValues()[0] : null;
     const after = before ? before.slice() : new Array(table.header.length).fill('');
     after[table.map.SongID] = songId;
-    after[table.map.Title] = clean_(songRow.values[songsTable.map.Title]);
+    if (table.map.Title != null) after[table.map.Title] = clean_(songRow.values[songsTable.map.Title]);
     after[table.map.Lyricists] = credits.lyricists;
     after[table.map.Composers] = credits.composers;
     after[table.map.Choreographers] = credits.choreographers;
@@ -190,7 +190,7 @@ function saveSongCreditsForUniverse(payload) {
       if (rowNumber) sheet.getRange(rowNumber, 1, 1, after.length).setValues([after]);
       else rowNumber = appendStyledRow_(sheet, after);
       SpreadsheetApp.flush();
-      assertUniverseServiceRow_(sheet, rowNumber, after, [table.map.SongID,table.map.Title,table.map.Lyricists,table.map.Composers,table.map.Choreographers], '楽曲クレジット');
+      assertUniverseServiceRow_(sheet, rowNumber, after, [table.map.SongID,table.map.Title,table.map.Lyricists,table.map.Composers,table.map.Choreographers].filter(index => index != null), '楽曲クレジット');
       return { ok:true, songId:songId };
     } catch (error) {
       const rollbackErrors = [];
@@ -474,10 +474,10 @@ function createSongWithPartsCore_(ss, song, credits, parsedParts, context) {
     if (artist.id === 'G1') {
       creditsSheet = requireSheet_(ss, BU1.SHEETS.SONG_CREDITS);
       creditsTable = readTable_(creditsSheet);
-      requireColumns_(creditsTable, ['SongID','Title','Lyricists','Composers','Choreographers']);
+      requireColumns_(creditsTable, ['SongID','Lyricists','Composers','Choreographers']);
       const creditValues = new Array(creditsTable.header.length).fill('');
       creditValues[creditsTable.map.SongID] = reservation.issuedId;
-      creditValues[creditsTable.map.Title] = song.title;
+      if (creditsTable.map.Title != null) creditValues[creditsTable.map.Title] = song.title;
       creditValues[creditsTable.map.Lyricists] = credits.lyricists;
       creditValues[creditsTable.map.Composers] = credits.composers;
       creditValues[creditsTable.map.Choreographers] = credits.choreographers;
@@ -674,11 +674,11 @@ function assignSongIdToExistingRowCore_(ss, rowNumber, context) {
     if (song.artist === 'BE:FIRST') {
       const creditsSheet = requireSheet_(ss, BU1.SHEETS.SONG_CREDITS);
       const creditsTable = readTable_(creditsSheet);
-      requireColumns_(creditsTable, ['SongID','Title','Lyricists','Composers','Choreographers']);
+      requireColumns_(creditsTable, ['SongID','Lyricists','Composers','Choreographers']);
       if (!creditsTable.rows.some(function(r){return id_(r.values[creditsTable.map.SongID]) === reservation.issuedId;})) {
         const values = new Array(creditsTable.header.length).fill('');
         values[creditsTable.map.SongID] = reservation.issuedId;
-        values[creditsTable.map.Title] = song.title;
+        if (creditsTable.map.Title != null) values[creditsTable.map.Title] = song.title;
         creditRow = appendStyledRow_(creditsSheet, values);
       }
     }

@@ -70,7 +70,7 @@ function validateRequiredHeaders_(ss) {
   defs[BU1.SHEETS.GROUP_MEMBERS] = ['GroupID', 'MemberID', 'DisplayOrder'];
   defs[BU1.SHEETS.PROFILES] = ['MemberID'];
   defs[BU1.SHEETS.SONGS] = ['SongID', 'Title', 'ArtistID', 'ReleaseDate', 'Form', 'CDTitle', 'IsTitleTrack'];
-  defs[BU1.SHEETS.SONG_CREDITS] = ['SongID', 'Title', 'Lyricists', 'Composers', 'Choreographers'];
+  defs[BU1.SHEETS.SONG_CREDITS] = ['SongID', 'Lyricists', 'Composers', 'Choreographers'];
   defs[BU1.SHEETS.LYRICS_PARTS] = ['SongID', 'PartOrder', 'Singer', 'Lyrics'];
   defs[BU1.SHEETS.CARDS] = ['ImageID', 'MemberID', 'Rarity', 'DriveFileID', 'IsProfileMain'];
   const errors = [];
