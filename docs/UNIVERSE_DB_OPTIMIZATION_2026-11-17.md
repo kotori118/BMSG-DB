@@ -1,3 +1,7 @@
+> **現行仕様の正本ではありません** — 本ファイルは2026-11-17時点の設計・検証記録です。現行の決定・UI・DB構造は [04_BMSG Universe_統合仕様書](https://docs.google.com/document/d/1pgttqIlZ8pZtBNBpKt90U_nr4ZVZyeCtJyYvBhu8QFk/edit) および最新のGitHub main・Core／Log DBを参照してください。本文中の「正本」「管理者限定」「旧シート／列」「デプロイ禁止」等の記述は記録当時の状態であり、現在の実装指示としては使用しません。
+
+---
+
 # BMSG Universe — DB最適化・サイト経由管理移行計画（開発版）
 
 状態：**設計＋開発ブランチ実装のみ**。本番DBの移行／シート保護／デプロイは未実施。
