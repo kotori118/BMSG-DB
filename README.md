@@ -17,7 +17,7 @@ BMSG Universe の Core DB 管理・移行用 Apps Script。
 
 ## 仕様正本と現行データ構造
 
-- Universeの唯一の仕様正本は [04_BMSG Universe_統合仕様書](https://docs.google.com/document/d/1pgttqIlZ8pZtBNBpKt90U_nr4ZVZyeCtJyYvBhu8QFk/edit)。変更時はこの既存文書の該当章を直接修正し、分冊の変更履歴を再作成しない。
+- Universeの唯一の仕様正本は [BMSG Universe｜統合仕様書](https://docs.google.com/document/d/1pgttqIlZ8pZtBNBpKt90U_nr4ZVZyeCtJyYvBhu8QFk/edit)。変更時はこの既存文書の該当章を直接修正し、分冊の変更履歴を再作成しない。
 - 現行Core DBは11シート、Log DBは21シート。プロフィール項目定義の `ProfileSettings` はCore、利用者の `Users` と `CATALOG_Audit` はLogに置く。
 - `06_Songs` のC列は `ArtistID`（G＝グループ、U＝ユニット、M＝個人）。`07_SongCredits` は `SongID / Lyricists / Composers / Choreographers` の4列。旧 `Artist / SongType / SoloMemberID / ArtistRef` の列構成を復活させない。
 - 実際の実装・DB構造が統合仕様書と一致しないときは、現物を調査し不一致を明示する。仕様としての決定、実装状態、実機・保存の検証状態は区別する。
